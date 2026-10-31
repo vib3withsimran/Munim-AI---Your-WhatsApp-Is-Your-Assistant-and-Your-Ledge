@@ -54,6 +54,56 @@ Escalation Rules:
 - Return ONLY the JSON object. Do not enclose in markdown backticks.
 """
 
+def _build_extracted_message(
+    parsed: dict,
+    message_id: str,
+    timestamp: str,
+    media_type: str,
+    customer_phone: str,
+    raw_text: str
+) -> ExtractedMessage:
+    items = [
+        OrderItem(
+            name=it.get("name", "Item"),
+            qty=int(it.get("qty", 1)),
+            size=it.get("size"),
+            color=it.get("color"),
+            unit_price=float(it["unit_price"]) if it.get("unit_price") is not None else None
+        )
+        for it in parsed.get("items", [])
+    ]
+
+    conf_dict = parsed.get("confidence", {})
+    confidence = ConfidenceScore(
+        overall=float(conf_dict.get("overall", 0.9)),
+        items=float(conf_dict.get("items", 0.9)),
+        amount=float(conf_dict.get("amount", 0.9))
+    )
+
+    escalate = parsed.get("escalate_to_owner", False)
+    if confidence.overall < 0.75 or parsed.get("type") in ["complaint", "partial_payment"]:
+        escalate = True
+
+    return ExtractedMessage(
+        message_id=message_id,
+        timestamp=timestamp,
+        media_type=media_type,
+        type=parsed.get("type", "unknown"),
+        customer_phone=customer_phone,
+        customer_name=parsed.get("customer_name"),
+        items=items,
+        amount=float(parsed["amount"]) if parsed.get("amount") is not None else None,
+        upi_txn_id=parsed.get("upi_txn_id"),
+        linked_order_id=parsed.get("linked_order_id"),
+        delivery_address=parsed.get("delivery_address"),
+        raw_text=raw_text,
+        confidence=confidence,
+        reply_needed=parsed.get("reply_needed", True),
+        escalate_to_owner=escalate,
+        escalation_reason=parsed.get("escalation_reason")
+    )
+
+
 async def analyze_message(
     raw_text: str,
     customer_phone: str,
@@ -63,7 +113,8 @@ async def analyze_message(
     catalog_summary: str = ""
 ) -> ExtractedMessage:
     """
-    Extracts structured intent, items, amount, and confidence from customer message using Gemini.
+    Extracts structured intent, items, amount, and confidence from customer message.
+    Uses ultra-fast Groq LLM (<1s) with automatic fallback to Gemini.
     """
     if not timestamp:
         timestamp = datetime.now().isoformat()
@@ -91,6 +142,41 @@ Message: "{clean_text}"
     if catalog_summary:
         user_prompt += f"\nStore Catalog Context:\n{catalog_summary}\n"
 
+    # 1. Fast-Path: Groq API (<1 second turnaround for WhatsApp webhook)
+    if settings.GROQ_API_KEY:
+        try:
+            groq_url = "https://api.groq.com/openai/v1/chat/completions"
+            groq_payload = {
+                "model": "openai/gpt-oss-20b",
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"}
+            }
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.post(
+                    groq_url,
+                    json=groq_payload,
+                    headers={
+                        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "MunimAI/1.0"
+                    }
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    raw_json = data["choices"][0]["message"]["content"].strip()
+                    parsed = json.loads(raw_json)
+                    logger.info("Successfully extracted intent via Groq fast-path (<1s)")
+                    return _build_extracted_message(parsed, message_id, timestamp, media_type, customer_phone, raw_text)
+                else:
+                    logger.warning(f"Groq API returned status {resp.status_code}, falling back to Gemini...")
+        except Exception as e:
+            logger.warning(f"Groq API call failed or timed out ({e}), falling back to Gemini...")
+
+    # 2. Fallback: Google Gemini API
     candidate_models = [settings.GEMINI_MODEL, "gemini-3.1-flash-lite", "gemini-2.5-pro"]
     
     for model_name in candidate_models:
@@ -111,60 +197,20 @@ Message: "{clean_text}"
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
                 if resp.status_code == 200:
                     data = resp.json()
                     raw_json = data["candidates"][0]["content"]["parts"][0]["text"].strip()
                     parsed = json.loads(raw_json)
-
-                    # Build items list
-                    items = [
-                        OrderItem(
-                            name=it.get("name", "Item"),
-                            qty=int(it.get("qty", 1)),
-                            size=it.get("size"),
-                            color=it.get("color"),
-                            unit_price=float(it["unit_price"]) if it.get("unit_price") is not None else None
-                        )
-                        for it in parsed.get("items", [])
-                    ]
-
-                    conf_dict = parsed.get("confidence", {})
-                    confidence = ConfidenceScore(
-                        overall=float(conf_dict.get("overall", 0.9)),
-                        items=float(conf_dict.get("items", 0.9)),
-                        amount=float(conf_dict.get("amount", 0.9))
-                    )
-
-                    escalate = parsed.get("escalate_to_owner", False)
-                    if confidence.overall < 0.75 or parsed.get("type") in ["complaint", "partial_payment"]:
-                        escalate = True
-
-                    return ExtractedMessage(
-                        message_id=message_id,
-                        timestamp=timestamp,
-                        media_type=media_type,
-                        type=parsed.get("type", "unknown"),
-                        customer_phone=customer_phone,
-                        customer_name=parsed.get("customer_name"),
-                        items=items,
-                        amount=float(parsed["amount"]) if parsed.get("amount") is not None else None,
-                        upi_txn_id=parsed.get("upi_txn_id"),
-                        linked_order_id=parsed.get("linked_order_id"),
-                        delivery_address=parsed.get("delivery_address"),
-                        raw_text=raw_text,
-                        confidence=confidence,
-                        reply_needed=parsed.get("reply_needed", True),
-                        escalate_to_owner=escalate,
-                        escalation_reason=parsed.get("escalation_reason")
-                    )
+                    logger.info(f"Successfully extracted intent via Gemini ({model_name})")
+                    return _build_extracted_message(parsed, message_id, timestamp, media_type, customer_phone, raw_text)
                 else:
-                    logger.warning(f"Gemini API ({model_name}) returned status {resp.status_code}, trying fallback model if available...")
+                    logger.warning(f"Gemini API ({model_name}) returned status {resp.status_code}, trying fallback model...")
         except Exception as e:
             logger.warning(f"Error querying Gemini model {model_name}: {e}")
 
-    # Fallback if Gemini request or JSON parse fails
+    # Fallback if both Groq and Gemini fail
     return ExtractedMessage(
         message_id=message_id,
         timestamp=timestamp,
@@ -212,11 +258,39 @@ def generate_smart_reply(extracted: ExtractedMessage, catalog: List[Dict[str, An
         )
 
     elif msg_type == "catalog_query":
+        # Check if customer inquired about a specific item in the catalog
+        query_text = (extracted.raw_text or "").lower()
+        matched_items = []
+        if catalog:
+            for c in catalog:
+                name_words = [w.strip() for w in c.get("name", "").lower().split() if len(w.strip()) > 3]
+                if any(w in query_text for w in name_words):
+                    matched_items.append(c)
+
+        if matched_items:
+            m = matched_items[0]
+            is_avail = str(m.get("available", "yes")).lower() in ["yes", "true", "1"]
+            avail_str = "available hai" if is_avail else "filhaal out of stock hai"
+            price_clean = str(m.get("price", "")).replace("₹", "").strip()
+            sizes = f" ({m.get('description')})" if m.get('description') else ""
+            if is_avail:
+                return (
+                    f"Namaste {name}! 🙏\n"
+                    f"Haanji! Hamare paas *{m.get('name')}* {avail_str} — ₹{price_clean}{sizes}.\n\n"
+                    f"Aapko kaunsa size chahiye? Apna address aur size bhejkar order confirm kar sakte hain!"
+                )
+            else:
+                return (
+                    f"Namaste {name}! 🙏\n"
+                    f"*{m.get('name')}* {avail_str}. Par hamare paas baaki fresh collection available hai! Kya aapko dusre designs dekhne hain?"
+                )
+
         if catalog:
             items_list = []
             for c in catalog[:5]:
                 avail = "Available" if str(c.get("available", "yes")).lower() in ["yes", "true", "1"] else "Out of stock"
-                items_list.append(f"• {c.get('name')}: ₹{c.get('price')} ({avail})")
+                price_clean = str(c.get("price", "")).replace("₹", "").strip()
+                items_list.append(f"• {c.get('name')}: ₹{price_clean} ({avail})")
             catalog_text = "\n".join(items_list)
             return (
                 f"Namaste! 🙏\n"

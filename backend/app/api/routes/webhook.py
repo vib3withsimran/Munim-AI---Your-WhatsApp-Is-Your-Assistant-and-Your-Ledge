@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Request, Query, Response, status
+from fastapi import APIRouter, Request, Query, Response, BackgroundTasks, status
 
 from backend.app.core.config import settings
 from backend.app.services.db import is_duplicate_message, record_processed_message
@@ -17,6 +17,21 @@ from backend.app.utils.privacy import check_privacy
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+def build_twiml_response(reply_text: str) -> Response:
+    """Builds standard TwiML XML response for Twilio WhatsApp (bypasses ContentSid restriction)."""
+    # Escape basic XML chars
+    safe_text = (
+        reply_text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Message>{safe_text}</Message>
+</Response>"""
+    return Response(content=xml_content, media_type="application/xml", status_code=status.HTTP_200_OK)
+
 
 @router.get("/webhook")
 async def verify_webhook(
@@ -40,11 +55,26 @@ async def verify_webhook(
     }
 
 
+def background_sync_sheets(extracted, sender_phone: str, customer_display_name: str):
+    """Executes Google Sheets synchronization in the background to ensure sub-3s WhatsApp replies."""
+    try:
+        add_or_update_customer(
+            phone=sender_phone,
+            name=customer_display_name,
+            status="active"
+        )
+        if extracted.type == "order":
+            add_order(extracted)
+        elif extracted.type in ["payment", "partial_payment"]:
+            add_payment(extracted)
+    except Exception as e:
+        logger.error(f"Error in background Google Sheets sync: {e}")
+
+
 @router.post("/webhook")
-async def handle_webhook(request: Request):
+async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Handles incoming WhatsApp messages from Twilio (and JSON mocks).
-    Twilio sends data as 'application/x-www-form-urlencoded'.
     """
     content_type = request.headers.get("content-type", "")
 
@@ -77,7 +107,7 @@ async def handle_webhook(request: Request):
             else:
                 msg_type = "media"
     else:
-        # Fallback for JSON test payloads (mock test suite)
+        # Fallback for JSON test payloads
         try:
             data = await request.json()
             entries = data.get("entry", [])
@@ -99,7 +129,7 @@ async def handle_webhook(request: Request):
 
     if not sender_phone or not message_id:
         # Empty heartbeat / ping from provider
-        return {"status": "success"}
+        return Response(content="OK", status_code=status.HTTP_200_OK)
 
     # 2. Deduplication Check (SQLite)
     if is_duplicate_message(message_id):
@@ -121,12 +151,11 @@ async def handle_webhook(request: Request):
     if is_private:
         logger.info(f"Privacy active for {sender_phone}. Bypassing AI & storage.")
         if raw_text.strip().lower().startswith("#private"):
-            await send_whatsapp_message(sender_phone, "🔒 Munim AI assistant paused for this chat. Type #resume to restart.")
-        return {"status": "success"}
+            return build_twiml_response("🔒 Munim AI assistant paused for this chat. Type #resume to restart.")
+        return Response(content="OK", status_code=status.HTTP_200_OK)
 
     if raw_text.strip().lower().startswith("#resume"):
-        await send_whatsapp_message(sender_phone, "🔓 Munim AI assistant resumed for this chat.")
-        return {"status": "success"}
+        return build_twiml_response("🔓 Munim AI assistant resumed for this chat.")
 
     # 4. Check for Owner Commands (summary, pending dues)
     clean_sender = sender_phone.replace("+", "").strip()
@@ -135,8 +164,7 @@ async def handle_webhook(request: Request):
 
     if clean_sender and clean_sender == clean_owner and lower_text in ["summary", "pending dues", "dues", "hisaab"]:
         summary_text = get_store_summary()
-        await send_whatsapp_message(sender_phone, summary_text)
-        return {"status": "success"}
+        return build_twiml_response(summary_text)
 
     # 5. AI Extraction (Gemini)
     catalog = get_catalog()
@@ -156,37 +184,19 @@ async def handle_webhook(request: Request):
 
     logger.info(f"Extracted intent for {sender_phone}: {extracted.type} (confidence: {extracted.confidence.overall})")
 
-    # 6. Update Google Sheets (Customers, Orders, Payments)
+    # 6. Schedule Google Sheets sync in background (doesn't delay Twilio response)
     customer_display_name = extracted.customer_name or contact_name
-    add_or_update_customer(
-        phone=sender_phone,
-        name=customer_display_name,
-        status="active"
+    background_tasks.add_task(
+        background_sync_sheets,
+        extracted=extracted,
+        sender_phone=sender_phone,
+        customer_display_name=customer_display_name
     )
 
-    if extracted.type == "order":
-        add_order(extracted)
-
-    elif extracted.type in ["payment", "partial_payment"]:
-        add_payment(extracted)
-
-    # 7. Owner Escalation Check (low confidence / discount / complaint)
-    if extracted.escalate_to_owner and clean_owner:
-        reason = extracted.escalation_reason or "Customer inquiry requires owner attention."
-        escalation_alert = (
-            "🚨 *Munim AI Alert — Attention Needed*\n"
-            f"• Customer: +{sender_phone} ({customer_display_name or 'Unknown'})\n"
-            f"• Type: {extracted.type}\n"
-            f"• Reason: {reason}\n"
-            f"• Message: \"{raw_text}\""
-        )
-        await send_whatsapp_message(clean_owner, escalation_alert)
-        logger.info(f"Escalated message to owner ({clean_owner}).")
-
-    # 8. Customer Auto-Reply
+    # 7. Customer Auto-Reply (via TwiML so Twilio delivers it instantly!)
     if extracted.reply_needed:
         reply_text = generate_smart_reply(extracted, catalog)
-        await send_whatsapp_message(sender_phone, reply_text)
-        logger.info(f"Replied to customer {sender_phone}: {reply_text[:60]}...")
+        logger.info(f"Generated reply for {sender_phone}: {reply_text[:60]}...")
+        return build_twiml_response(reply_text)
 
-    return {"status": "success"}
+    return Response(content="OK", status_code=status.HTTP_200_OK)
