@@ -99,3 +99,4 @@ class FinanceAgent:
             "⏳ Pending Claims: 1 requires verification\n"
             "📌 Outstanding Customer Dues: View via Dashboard > Pending Dues\n"
         )
+
