@@ -1,0 +1,17 @@
+backend/data/munim.db
+backend/data/*.db
+backend/data/service_account.json
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
