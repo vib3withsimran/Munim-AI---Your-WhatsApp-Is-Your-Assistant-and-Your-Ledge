@@ -1,26 +1,35 @@
 import logging
+import httpx
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Request, Query, Response, BackgroundTasks, status
 
 from backend.app.core.config import settings
 from backend.app.services.db import is_duplicate_message, record_processed_message
-from backend.app.services.whatsapp import send_whatsapp_message
-from backend.app.services.ai import analyze_message, generate_smart_reply
+from backend.app.ai import extract_text, extract_audio, extract_image
+from backend.app.agents import Orchestrator
 from backend.app.services.sheets import (
     add_or_update_customer,
     add_order,
     add_payment,
-    get_catalog,
     get_store_summary
 )
 from backend.app.utils.privacy import check_privacy
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+orchestrator = Orchestrator()
+
+# Fast greeting dictionary to respond instantaneously (< 10ms) without invoking any LLM
+FAST_GREETINGS = {
+    "hi", "hii", "hiiii", "hello", "hello ji", "hey", "heyy",
+    "namaste", "namaste ji", "pranam",
+    "kaise ho", "kaise ho aap", "kaise ho aap log", "kya haal hai", "kya hal hai",
+    "good morning", "good evening", "good afternoon"
+}
 
 def build_twiml_response(reply_text: str) -> Response:
     """Builds standard TwiML XML response for Twilio WhatsApp (bypasses ContentSid restriction)."""
-    # Escape basic XML chars
     safe_text = (
         reply_text.replace("&", "&amp;")
         .replace("<", "&lt;")
@@ -39,11 +48,7 @@ async def verify_webhook(
     hub_challenge: str = Query(None, alias="hub.challenge"),
     hub_verify_token: str = Query(None, alias="hub.verify_token")
 ):
-    """
-    GET /webhook endpoint:
-    - Provides a quick healthcheck in browser
-    - Supports Meta handshake if needed
-    """
+    """GET /webhook healthcheck and handshake."""
     if hub_mode == "subscribe" and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN:
         logger.info("Webhook verification handshake successful!")
         return Response(content=hub_challenge, media_type="text/plain", status_code=status.HTTP_200_OK)
@@ -56,7 +61,7 @@ async def verify_webhook(
 
 
 def background_sync_sheets(extracted, sender_phone: str, customer_display_name: str):
-    """Executes Google Sheets synchronization in the background to ensure sub-3s WhatsApp replies."""
+    """Executes Google Sheets synchronization in the background as a safe backup."""
     try:
         add_or_update_customer(
             phone=sender_phone,
@@ -71,26 +76,47 @@ def background_sync_sheets(extracted, sender_phone: str, customer_display_name: 
         logger.error(f"Error in background Google Sheets sync: {e}")
 
 
+async def fetch_twilio_media(media_url: str) -> Optional[bytes]:
+    """
+    Downloads media file (image/audio) from Twilio Media URL using Twilio Basic Auth.
+    """
+    try:
+        auth = None
+        if settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN:
+            auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(media_url, auth=auth)
+            if resp.status_code == 200:
+                return resp.content
+            logger.warning(f"Failed to fetch Twilio media: HTTP {resp.status_code}")
+    except Exception as e:
+        logger.error(f"Error downloading Twilio media from {media_url}: {e}")
+    return None
+
+
 @router.post("/webhook")
 async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     """
-    Handles incoming WhatsApp messages from Twilio (and JSON mocks).
+    Handles incoming WhatsApp messages from Twilio with sub-1s fast path,
+    multimodal processing (images & audio), and Phase 3 multi-agent routing.
     """
     content_type = request.headers.get("content-type", "")
 
-    # 1. Parse incoming message (Twilio Form or JSON)
     message_id = ""
     sender_phone = ""
     contact_name = ""
     raw_text = ""
     msg_type = "text"
+    media_url = ""
+    media_content_type = ""
     timestamp_iso = datetime.now().isoformat()
 
+    # 1. Parse incoming Twilio Form or JSON mock
     if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
         form_data = await request.form()
         message_id = form_data.get("MessageSid", "")
         from_raw = form_data.get("From", "")
-        # Clean 'whatsapp:+919876543210' -> '919876543210'
         sender_phone = from_raw.replace("whatsapp:", "").replace("+", "").strip()
         contact_name = form_data.get("ProfileName", "")
         raw_text = form_data.get("Body", "").strip()
@@ -98,16 +124,14 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         num_media = int(form_data.get("NumMedia", 0) or 0)
         if num_media > 0:
             media_content_type = form_data.get("MediaContentType0", "")
+            media_url = form_data.get("MediaUrl0", "")
             if "audio" in media_content_type:
                 msg_type = "audio"
-                raw_text = raw_text or "[Voice Note / Audio Message]"
             elif "image" in media_content_type:
                 msg_type = "image"
-                raw_text = raw_text or "[Image Message / UPI Screenshot]"
             else:
                 msg_type = "media"
     else:
-        # Fallback for JSON test payloads
         try:
             data = await request.json()
             entries = data.get("entry", [])
@@ -128,7 +152,6 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
             return Response(content="Invalid payload", status_code=status.HTTP_400_BAD_REQUEST)
 
     if not sender_phone or not message_id:
-        # Empty heartbeat / ping from provider
         return Response(content="OK", status_code=status.HTTP_200_OK)
 
     # 2. Deduplication Check (SQLite)
@@ -136,7 +159,6 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         logger.info(f"Duplicate message ignored: {message_id}")
         return Response(content="Duplicate ignored", status_code=status.HTTP_200_OK)
 
-    # Record message ID in SQLite
     record_processed_message(
         message_id=message_id,
         sender_phone=sender_phone,
@@ -144,7 +166,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         raw_text=raw_text
     )
 
-    logger.info(f"Processing Twilio message from {sender_phone} ({contact_name}): '{raw_text}'")
+    logger.info(f"Processing Twilio message from {sender_phone} ({contact_name}): '{raw_text}' [type={msg_type}]")
 
     # 3. Privacy Filter Check (#private / #resume)
     is_private, _ = check_privacy(sender_phone, raw_text)
@@ -157,34 +179,76 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     if raw_text.strip().lower().startswith("#resume"):
         return build_twiml_response("🔓 Munim AI assistant resumed for this chat.")
 
-    # 4. Check for Owner Commands (summary, pending dues)
+    # 4. Instant Fast-Path for Conversational Greetings (< 10ms turnaround)
+    clean_text = raw_text.lower().strip()
+    clean_no_punct = "".join(c for c in clean_text if c.isalnum() or c.isspace()).strip()
+    if msg_type == "text" and (clean_text in FAST_GREETINGS or clean_no_punct in FAST_GREETINGS or not clean_text):
+        name_disp = contact_name or "Ji"
+        fast_reply = (
+            f"Namaste {name_disp}! 🙏 Munim AI par aapka swagat hai.\n\n"
+            f"Main aapka personal business assistant hoon. Aap mujhse:\n"
+            f"• Available designs aur prices pooch sakte hain\n"
+            f"• Naya order book kar sakte hain\n"
+            f"• UPI payment screenshot bhej sakte hain\n\n"
+            f"Bataiye, aaj aapko kya dekhna hai?"
+        )
+        logger.info(f"Instant greeting fast-path triggered for {sender_phone} (<10ms)")
+        return build_twiml_response(fast_reply)
+
+    # 5. Check for Owner Commands (summary, pending dues)
     clean_sender = sender_phone.replace("+", "").strip()
     clean_owner = settings.OWNER_WHATSAPP_NUMBER.replace("+", "").strip()
-    lower_text = raw_text.strip().lower()
-
-    if clean_sender and clean_sender == clean_owner and lower_text in ["summary", "pending dues", "dues", "hisaab"]:
+    if clean_sender and clean_sender == clean_owner and clean_text in ["summary", "pending dues", "dues", "hisaab"]:
         summary_text = get_store_summary()
         return build_twiml_response(summary_text)
 
-    # 5. AI Extraction (Gemini)
-    catalog = get_catalog()
-    catalog_summary = "\n".join([
-        f"- {c.get('name')}: ₹{c.get('price')} (Sizes/Details: {c.get('description', '')})"
-        for c in catalog
-    ])
+    # 6. Multimodal Extraction Pipeline (Groq for Text, Gemini for Audio & Images)
+    extracted = None
 
-    extracted = await analyze_message(
-        raw_text=raw_text,
-        customer_phone=sender_phone,
-        message_id=message_id,
-        timestamp=timestamp_iso,
-        media_type=msg_type,
-        catalog_summary=catalog_summary
-    )
+    if msg_type == "image" and media_url:
+        logger.info(f"Downloading image from Twilio: {media_url}")
+        img_bytes = await fetch_twilio_media(media_url)
+        if img_bytes:
+            extracted = await extract_image(
+                image_bytes=img_bytes,
+                mime_type=media_content_type or "image/jpeg",
+                customer_phone=sender_phone,
+                message_id=message_id,
+                timestamp=timestamp_iso
+            )
+
+    elif msg_type == "audio" and media_url:
+        logger.info(f"Downloading audio voice note from Twilio: {media_url}")
+        aud_bytes = await fetch_twilio_media(media_url)
+        if aud_bytes:
+            extracted = await extract_audio(
+                audio_bytes=aud_bytes,
+                mime_type=media_content_type or "audio/ogg",
+                customer_phone=sender_phone,
+                message_id=message_id,
+                timestamp=timestamp_iso
+            )
+
+    # Default to text extraction
+    if not extracted:
+        extracted = await extract_text(
+            raw_text=raw_text or "[Empty message]",
+            customer_phone=sender_phone,
+            message_id=message_id,
+            timestamp=timestamp_iso
+        )
 
     logger.info(f"Extracted intent for {sender_phone}: {extracted.type} (confidence: {extracted.confidence.overall})")
 
-    # 6. Schedule Google Sheets sync in background (doesn't delay Twilio response)
+    # 7. Route through Phase 3 Orchestrator & Agents
+    context = {
+        "seller_id": "default_seller",
+        "customer_id": sender_phone,
+        "customer_name": contact_name or extracted.customer_name or "Ji"
+    }
+    execution_result = await orchestrator.route_and_execute(extracted, context)
+
+    # 8. Background Safety Sync to Google Sheets
     customer_display_name = extracted.customer_name or contact_name
     background_tasks.add_task(
         background_sync_sheets,
@@ -193,10 +257,10 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         customer_display_name=customer_display_name
     )
 
-    # 7. Customer Auto-Reply (via TwiML so Twilio delivers it instantly!)
-    if extracted.reply_needed:
-        reply_text = generate_smart_reply(extracted, catalog)
-        logger.info(f"Generated reply for {sender_phone}: {reply_text[:60]}...")
+    # 9. Return Instant TwiML XML Response to Customer
+    reply_text = execution_result.get("reply", "")
+    if reply_text:
+        logger.info(f"Delivering reply via {execution_result.get('agent_used')}: {reply_text[:60]}...")
         return build_twiml_response(reply_text)
 
     return Response(content="OK", status_code=status.HTTP_200_OK)

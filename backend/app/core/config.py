@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # AI (Gemini & Groq)
     GEMINI_API_KEY: str = Field(default="")
-    GEMINI_MODEL: str = Field(default="gemini-3.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
     GROQ_API_KEY: str = Field(default="")
 
     # App settings
