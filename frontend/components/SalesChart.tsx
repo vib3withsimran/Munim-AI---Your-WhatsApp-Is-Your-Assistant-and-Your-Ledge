@@ -1,49 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SplineChart from "./SplineChart";
+import { api, DashboardSalesResponse } from "@/lib/api";
 
 const TIME_FILTERS = ["7D", "30D", "3M", "6M"] as const;
-
-// Mock data
-const DATA_MAP: Record<string, { label: string; value: number }[]> = {
-  "7D": [
-    { label: "Oct 24", value: 68000 },
-    { label: "Oct 25", value: 72000 },
-    { label: "Oct 26", value: 69500 },
-    { label: "Oct 27", value: 78000 },
-    { label: "Oct 28", value: 74200 },
-    { label: "Oct 29", value: 81000 },
-    { label: "Oct 30", value: 86420 },
-  ],
-  "30D": [
-    { label: "Oct 1", value: 42000 },
-    { label: "Oct 5", value: 51000 },
-    { label: "Oct 10", value: 48000 },
-    { label: "Oct 15", value: 62000 },
-    { label: "Oct 20", value: 70000 },
-    { label: "Oct 25", value: 79000 },
-    { label: "Oct 30", value: 86420 },
-  ],
-  "3M": [
-    { label: "Aug", value: 54000 },
-    { label: "Sep", value: 68000 },
-    { label: "Oct", value: 86420 },
-  ],
-  "6M": [
-    { label: "May", value: 38000 },
-    { label: "Jun", value: 45000 },
-    { label: "Jul", value: 52000 },
-    { label: "Aug", value: 54000 },
-    { label: "Sep", value: 68000 },
-    { label: "Oct", value: 86420 },
-  ],
-};
+type TimeFilter = typeof TIME_FILTERS[number];
 
 export default function SalesChart() {
-  const [active, setActive] = useState<keyof typeof DATA_MAP>("30D");
-  const data = DATA_MAP[active];
-  const latest = data[data.length - 1].value;
+  const [active, setActive] = useState<TimeFilter>("30D");
+  const [salesData, setSalesData] = useState<DashboardSalesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchSales = async (period: TimeFilter) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.getSales(period);
+      setSalesData(res);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load sales data";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSales(active);
+  }, [active]);
+
+  const chartData = salesData?.data || [];
+  const totalSales = salesData?.total_sales ?? 0;
+  const changePct = salesData?.change_percentage ?? 0;
+  const isPositive = changePct >= 0;
 
   return (
     <div className="glass-card p-5 col-span-full xl:col-span-2">
@@ -53,11 +44,19 @@ export default function SalesChart() {
           <h2 className="text-[#f0fdf4] font-semibold text-base">Sales Overview</h2>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-2xl font-bold text-[#f0fdf4]">
-              ₹{latest.toLocaleString("en-IN")}
+              {loading ? "..." : `₹${Math.round(totalSales).toLocaleString("en-IN")}`}
             </span>
-            <span className="flex items-center gap-1 text-xs font-semibold text-[#4efa72] bg-[rgba(78,250,114,0.12)] px-2 py-0.5 rounded-full">
-              ↑ 18% vs last 30 days
-            </span>
+            {!loading && (
+              <span
+                className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  isPositive
+                    ? "text-[#4efa72] bg-[rgba(78,250,114,0.12)]"
+                    : "text-[#f87171] bg-[rgba(248,113,113,0.12)]"
+                }`}
+              >
+                {isPositive ? "↑" : "↓"} {Math.abs(changePct)}% vs prev {active}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1 bg-[#0d1410] rounded-lg p-1 border border-[rgba(78,250,114,0.1)]">
@@ -65,7 +64,7 @@ export default function SalesChart() {
             <button
               key={f}
               onClick={() => setActive(f)}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-200 ${
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-200 cursor-pointer ${
                 active === f
                   ? "bg-[#4efa72] text-[#0d1410]"
                   : "text-[#9db8a0] hover:text-[#f0fdf4]"
@@ -77,9 +76,28 @@ export default function SalesChart() {
         </div>
       </div>
 
-      {/* Chart */}
-      <SplineChart data={data} height={160} />
+      {/* Chart Body */}
+      {error ? (
+        <div className="h-40 flex items-center justify-center p-4 rounded-xl bg-[rgba(248,113,113,0.06)] border border-[rgba(248,113,113,0.15)] text-[#f87171] text-xs">
+          <span>⚠️ {error}</span>
+          <button
+            onClick={() => fetchSales(active)}
+            className="ml-3 underline hover:text-[#f0fdf4]"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
+        <div className="h-40 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-[#4efa72] border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : chartData.length === 0 ? (
+        <div className="h-40 flex items-center justify-center text-xs text-[#5d7a63]">
+          No sales recorded in this period.
+        </div>
+      ) : (
+        <SplineChart data={chartData} height={160} />
+      )}
     </div>
   );
 }
-
