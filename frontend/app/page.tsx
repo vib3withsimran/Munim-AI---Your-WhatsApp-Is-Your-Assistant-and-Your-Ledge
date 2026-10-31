@@ -1,31 +1,41 @@
 import LandingNav from "@/components/LandingNav";
 import HeroSection from "@/components/HeroSection";
 import FeaturesSection from "@/components/FeaturesSection";
-import ExtraSections from "@/components/ExtraSections";
+import FinalCTASection from "@/components/FinalCTASection";
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#0d1410]">
+    <div className="min-h-screen bg-[#071410] text-[#F5F7F4]">
       <LandingNav />
-      <HeroSection />
-      <FeaturesSection />
-      <ExtraSections />
+      <main>
+        <HeroSection />
+        <FeaturesSection />
+        <FinalCTASection />
+      </main>
 
       {/* Footer */}
-      <footer className="border-t border-[rgba(78,250,114,0.08)] py-8">
+      <footer className="border-t border-[#4efa72]/15 bg-[#050e0b] py-8">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#4efa72] flex items-center justify-center text-[#0d1410] font-black text-xs">M</div>
-            <span className="text-[#9db8a0] text-sm">Munim AI — Aapke Dukaan Ka Digital Munim</span>
+            <div className="w-7 h-7 rounded-lg bg-[#B5FF4D] flex items-center justify-center text-[#071410] font-black text-xs">
+              M
+            </div>
+            <span className="text-[#BAC8C1] text-sm">
+              Munim AI — Aapke Dukaan Ka Digital Munim
+            </span>
           </div>
           <div className="flex items-center gap-6">
-            {["Privacy", "Terms", "Contact"].map((l) => (
-              <a key={l} href="#" className="text-[#5d7a63] hover:text-[#9db8a0] text-sm transition-colors">
+            {["Features", "How it Works", "Dashboard", "Privacy", "Contact"].map((l) => (
+              <a
+                key={l}
+                href={l === "Dashboard" ? "/dashboard" : `#${l.toLowerCase().replace(/ /g, "-")}`}
+                className="text-[#5d7a63] hover:text-[#B5FF4D] text-xs transition-colors"
+              >
                 {l}
               </a>
             ))}
           </div>
-          <p className="text-[#5d7a63] text-xs">Made with ❤️ for India's home sellers</p>
+          <p className="text-[#5d7a63] text-xs">Made with ❤️ for India&apos;s home sellers</p>
         </div>
       </footer>
     </div>

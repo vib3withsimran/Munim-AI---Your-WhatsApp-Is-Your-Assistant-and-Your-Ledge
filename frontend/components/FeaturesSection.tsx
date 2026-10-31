@@ -2,161 +2,234 @@
 
 const FEATURES = [
   {
-    icon: "📱",
-    color: "#25D366",
+    icon: (
+      <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+      </svg>
+    ),
     title: "WhatsApp se Orders",
-    desc: "Customers ka message, seedha order mein. Zero extra app.",
+    desc: "Customers ka message, seedha order mein.",
   },
   {
-    icon: "🗂️",
-    color: "#4efa72",
+    icon: (
+      <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+      </svg>
+    ),
     title: "Automatic Record",
     desc: "Orders, payments aur customers sab apne aap update.",
   },
   {
-    icon: "👥",
-    color: "#60a5fa",
+    icon: (
+      <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+      </svg>
+    ),
     title: "Customer Ki Yaad",
     desc: "Har customer ka purana order, preference aur details hamesha available.",
   },
   {
-    icon: "📦",
-    color: "#fbbf24",
+    icon: (
+      <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+    ),
     title: "Inventory (Stock)",
     desc: "Kitna maal bacha hai, hamesha pata rahe.",
   },
   {
-    icon: "🔔",
-    color: "#f87171",
+    icon: (
+      <div className="relative">
+        <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 01-3.46 0" />
+        </svg>
+        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#10211A]" />
+      </div>
+    ),
     title: "Baki (Dues) Alert",
     desc: "Jin customers ke paise pending hain, unki reminder list.",
   },
   {
-    icon: "📊",
-    color: "#c084fc",
+    icon: (
+      <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="14" />
+      </svg>
+    ),
     title: "Simple Reports",
     desc: "Roz, hafte aur mahine ki bikri ka saaf hisaab.",
   },
 ];
 
-const STEPS = [
-  {
-    num: 1,
-    icon: "📱",
-    color: "#25D366",
-    title: "Customer message karta hai",
-    desc: "Seedha WhatsApp par — koi extra app nahi, koi training nahi",
-  },
-  {
-    num: 2,
-    icon: "✨",
-    color: "#4efa72",
-    title: "Munim AI message samajhkar record karta hai",
-    desc: "AI automatically order, payment ya query identify karta hai",
-  },
-  {
-    num: 3,
-    icon: "📊",
-    color: "#60a5fa",
-    title: "Dashboard par milein updates",
-    desc: "Aapko orders, payments aur customer data instant milta hai",
-  },
-];
-
 export default function FeaturesSection() {
   return (
-    <>
-      {/* Features */}
-      <section id="features" className="py-24 relative">
-        <div className="max-w-7xl mx-auto px-6">
-          {/* Badge */}
-          <div className="flex justify-center mb-4">
-            <div className="inline-flex items-center gap-2 bg-[rgba(78,250,114,0.1)] border border-[rgba(78,250,114,0.2)] rounded-full px-4 py-1.5">
-              <span className="text-[#4efa72] text-xs">✨</span>
-              <span className="text-[#4efa72] text-xs font-semibold">Sab Kuch Ek Jagah</span>
-            </div>
+    <section id="features" className="relative py-20 bg-[#071410] overflow-hidden">
+      {/* Background ambient lighting */}
+      <div className="absolute top-[20%] left-[10%] w-[500px] h-[500px] bg-[#4efa72]/8 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-[10%] right-[10%] w-[500px] h-[500px] bg-[#22c55e]/8 rounded-full blur-[140px] pointer-events-none" />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-6 space-y-20">
+        {/* Header */}
+        <div className="text-center space-y-4 max-w-3xl mx-auto">
+          {/* Centered Pill */}
+          <div className="inline-flex items-center gap-2 bg-[#0B1B16] border border-[#4efa72]/25 rounded-full px-4 py-1.5 shadow-[0_0_12px_rgba(78,250,114,0.12)]">
+            <span className="text-[#B5FF4D] text-xs">✨</span>
+            <span className="text-[#BAC8C1] text-xs font-semibold tracking-wide">
+              Sab Kuch Ek Jagah
+            </span>
           </div>
 
-          <h2 className="text-center text-4xl md:text-5xl font-black text-[#f0fdf4] mb-3">
-            Aapke Business ke Liye,{" "}
-            <span className="text-[#4efa72]">Smart Features</span>
-          </h2>
-          <p className="text-center text-[#9db8a0] text-lg max-w-xl mx-auto mb-14">
+          {/* Heading */}
+          <div className="space-y-1">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#F5F7F4] tracking-tight">
+              Aapke Business ke Liye,{" "}
+              <span className="relative inline-block text-[#B5FF4D]">
+                Smart Features
+                <svg
+                  className="absolute -bottom-2 left-0 w-full h-3 overflow-visible pointer-events-none"
+                  viewBox="0 0 240 12"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M2 9C60 2 180 2 238 8"
+                    stroke="#B5FF4D"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+            </h2>
+          </div>
+
+          {/* Subtitle */}
+          <p className="text-[#BAC8C1] text-base sm:text-lg pt-1">
             Munim AI aapke roz ke kaam ko asaan, tez aur organized banata hai.
           </p>
+        </div>
 
-          {/* Grid */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {FEATURES.map((f, i) => (
-              <div
-                key={f.title}
-                className="glass-card p-6 group cursor-default"
-                style={{ animationDelay: `${i * 80}ms` }}
-              >
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4 transition-transform group-hover:scale-110"
-                  style={{ background: `${f.color}1a`, boxShadow: `0 0 12px ${f.color}30` }}
-                >
-                  {f.icon}
-                </div>
-                <h3 className="text-[#f0fdf4] font-bold text-base mb-2">{f.title}</h3>
-                <p className="text-[#9db8a0] text-sm leading-relaxed">{f.desc}</p>
+        {/* Six Feature Cards (3 columns x 2 rows) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {FEATURES.map((item, idx) => (
+            <div
+              key={idx}
+              className="bg-[#10211A]/90 hover:bg-[#142921] border border-[#4efa72]/15 hover:border-[#B5FF4D]/40 rounded-2xl p-6 transition-all duration-300 shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:shadow-[0_0_25px_rgba(78,250,114,0.15)] hover:-translate-y-1 flex items-start gap-4"
+            >
+              <div className="w-12 h-12 rounded-xl bg-[#0B1B16] border border-[#4efa72]/25 flex items-center justify-center flex-shrink-0 shadow-[0_0_12px_rgba(78,250,114,0.1)]">
+                {item.icon}
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it Works */}
-      <section id="how-it-works" className="py-20 relative">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col lg:flex-row items-center gap-12">
-            {/* Left text */}
-            <div className="lg:w-64 flex-shrink-0">
-              <p className="text-[#4efa72] text-sm font-semibold mb-2">Kaise Kaam Karta Hai?</p>
-              <h2 className="text-3xl md:text-4xl font-black text-[#f0fdf4]">
-                Bas{" "}
-                <span className="text-[#4efa72]">3 Simple</span>
-                <br />
-                Steps
-              </h2>
-              <div className="w-16 h-1 bg-gradient-to-r from-[#4efa72] to-transparent rounded-full mt-3" />
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <h3 className="text-[#F5F7F4] font-bold text-base leading-snug">
+                  {item.title}
+                </h3>
+                <p className="text-[#BAC8C1] text-xs sm:text-sm leading-relaxed">
+                  {item.desc}
+                </p>
+              </div>
             </div>
+          ))}
+        </div>
 
-            {/* Steps */}
-            <div className="flex-1 flex flex-col md:flex-row items-center gap-4 md:gap-0">
-              {STEPS.map((step, i) => (
-                <div key={step.num} className="flex flex-col md:flex-row items-center flex-1">
-                  <div className="glass-card p-6 flex flex-col items-center text-center flex-1 relative">
-                    {/* Step number badge */}
-                    <div
-                      className="absolute -top-3 -right-3 w-7 h-7 rounded-full flex items-center justify-center text-[#0d1410] font-black text-xs border-2 border-[#0d1410]"
-                      style={{ background: step.color, boxShadow: `0 0 10px ${step.color}60` }}
-                    >
-                      {step.num}
-                    </div>
-                    <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl mb-4"
-                      style={{ background: `${step.color}15` }}
-                    >
-                      {step.icon}
-                    </div>
-                    <h3 className="text-[#f0fdf4] font-bold text-sm mb-2">{step.title}</h3>
-                    <p className="text-[#9db8a0] text-xs leading-relaxed">{step.desc}</p>
+        {/* Workflow Section: "Bas 3 Simple Steps" */}
+        <div className="pt-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Title */}
+          <div className="lg:col-span-4 space-y-2">
+            <span className="text-[#B5FF4D] text-xs font-bold tracking-wider uppercase">
+              Kaise Kaam Karta Hai?
+            </span>
+            <div className="relative inline-block">
+              <h3 className="text-3xl sm:text-4xl font-black text-[#F5F7F4] tracking-tight">
+                Bas 3 Simple Steps
+              </h3>
+              <svg
+                className="absolute -bottom-2 left-0 w-full h-3 overflow-visible pointer-events-none"
+                viewBox="0 0 200 12"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M2 9.5C50 2.5 150 2.5 198 8"
+                  stroke="#B5FF4D"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          </div>
+
+          {/* Right Wide Workflow Container */}
+          <div className="lg:col-span-8 bg-[#10211A]/95 border border-[#4efa72]/20 rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-[0_10px_35px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-3">
+              {/* Step 1 */}
+              <div className="flex-1 flex flex-col items-center text-center space-y-3">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-full bg-[#1b3d2d] border border-[#B5FF4D]/40 flex items-center justify-center text-xl shadow-[0_0_15px_rgba(181,255,77,0.2)]">
+                    <svg className="w-7 h-7 fill-[#B5FF4D]" viewBox="0 0 24 24">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.888 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                    </svg>
                   </div>
-                  {/* Arrow between steps */}
-                  {i < STEPS.length - 1 && (
-                    <div className="flex items-center justify-center w-10 h-10 text-[#4efa72] text-xl flex-shrink-0 my-4 md:my-0">
-                      →
-                    </div>
-                  )}
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#B5FF4D] text-[#071410] text-[10px] font-black flex items-center justify-center border-2 border-[#10211A]">
+                    1
+                  </span>
                 </div>
-              ))}
+                <p className="text-[#F5F7F4] text-xs sm:text-sm font-semibold max-w-[170px] leading-snug">
+                  Customer message karta hai
+                </p>
+              </div>
+
+              {/* Directional Chevron */}
+              <div className="text-[#B5FF4D] text-lg font-bold rotate-90 md:rotate-0 px-2 opacity-70">
+                ›
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex-1 flex flex-col items-center text-center space-y-3">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-full bg-[#1b3d2d] border border-[#B5FF4D]/40 flex items-center justify-center text-xl shadow-[0_0_15px_rgba(181,255,77,0.2)]">
+                    <span className="text-2xl text-[#B5FF4D]">✨</span>
+                  </div>
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#B5FF4D] text-[#071410] text-[10px] font-black flex items-center justify-center border-2 border-[#10211A]">
+                    2
+                  </span>
+                </div>
+                <p className="text-[#F5F7F4] text-xs sm:text-sm font-semibold max-w-[190px] leading-snug">
+                  Munim AI message samajhkar record karta hai
+                </p>
+              </div>
+
+              {/* Directional Chevron */}
+              <div className="text-[#B5FF4D] text-lg font-bold rotate-90 md:rotate-0 px-2 opacity-70">
+                ›
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex-1 flex flex-col items-center text-center space-y-3">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-full bg-[#1b3d2d] border border-[#B5FF4D]/40 flex items-center justify-center text-xl shadow-[0_0_15px_rgba(181,255,77,0.2)]">
+                    <svg className="w-6 h-6 stroke-[#B5FF4D] fill-none" viewBox="0 0 24 24" strokeWidth="2">
+                      <line x1="18" y1="20" x2="18" y2="10" />
+                      <line x1="12" y1="20" x2="12" y2="4" />
+                      <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                  </div>
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#B5FF4D] text-[#071410] text-[10px] font-black flex items-center justify-center border-2 border-[#10211A]">
+                    3
+                  </span>
+                </div>
+                <p className="text-[#F5F7F4] text-xs sm:text-sm font-semibold max-w-[210px] leading-snug">
+                  Aapko orders, payments aur updates dashboard par milte hain
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
-
