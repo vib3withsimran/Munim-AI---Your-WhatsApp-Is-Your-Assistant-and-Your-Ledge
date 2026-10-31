@@ -9,13 +9,18 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-    # WhatsApp Cloud API
+    # Twilio WhatsApp API
+    TWILIO_ACCOUNT_SID: str = Field(default="")
+    TWILIO_AUTH_TOKEN: str = Field(default="")
+    TWILIO_WHATSAPP_NUMBER: str = Field(default="whatsapp:+14155238886")
+
+    # Meta WhatsApp Cloud API (kept for backward compatibility)
     WHATSAPP_PHONE_NUMBER_ID: str = Field(default="")
     WHATSAPP_ACCESS_TOKEN: str = Field(default="")
     WHATSAPP_VERIFY_TOKEN: str = Field(default="munim_verify_2026")
     WHATSAPP_API_VERSION: str = Field(default="v19.0")
 
-    # Owner details
+    # Owner details (international format without +, e.g. 919876543210)
     OWNER_WHATSAPP_NUMBER: str = Field(default="")
 
     # Google Sheets
@@ -35,4 +40,3 @@ class Settings(BaseSettings):
     DRY_RUN: bool = Field(default=False)
 
 settings = Settings()
-
