@@ -199,20 +199,36 @@ def add_payment(extracted: ExtractedMessage) -> str:
         return ""
 
 
-def get_catalog() -> List[Dict[str, Any]]:
+import time
+
+_CATALOG_CACHE: Optional[List[Dict[str, Any]]] = None
+_CATALOG_CACHE_TIME: float = 0.0
+
+def get_catalog(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """
-    Reads all products currently defined in the Catalog tab.
+    Reads all products defined in the Catalog tab with in-memory caching
+    to prevent webhook timeouts during incoming WhatsApp messages.
     """
+    global _CATALOG_CACHE, _CATALOG_CACHE_TIME
+    now = time.time()
+
+    # Use cache if refreshed within the last 120 seconds
+    if not force_refresh and _CATALOG_CACHE is not None and (now - _CATALOG_CACHE_TIME < 120):
+        return _CATALOG_CACHE
+
     doc = get_sheets_client()
     if not doc:
-        return []
+        return _CATALOG_CACHE or []
 
     try:
         ws = doc.worksheet("Catalog")
-        return ws.get_all_records()
+        records = ws.get_all_records()
+        _CATALOG_CACHE = records
+        _CATALOG_CACHE_TIME = now
+        return records
     except Exception as e:
         logger.error(f"Error fetching catalog from Google Sheet: {e}")
-        return []
+        return _CATALOG_CACHE or []
 
 
 def is_in_privatelist(phone: str) -> bool:
