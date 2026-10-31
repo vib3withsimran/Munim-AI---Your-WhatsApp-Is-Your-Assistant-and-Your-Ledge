@@ -38,5 +38,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO")
     DATABASE_URL: str = Field(default="sqlite:///./backend/data/munim.db")
     DRY_RUN: bool = Field(default=False)
+    CORS_ORIGINS: str = Field(default="http://localhost:3000,http://127.0.0.1:3000")
+
+    # Supabase
+    SUPABASE_URL: str = Field(default="")
+    SUPABASE_PUBLISHABLE_KEY: str = Field(default="")
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
 settings = Settings()
