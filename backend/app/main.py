@@ -2,7 +2,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
-from backend.app.api.routes import webhook
+from backend.app.api.routes import webhook, auth, dashboard
 
 # Setup logging
 logging.basicConfig(
@@ -16,17 +16,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for local testing & dashboard integration
+# Enable CORS restricted to configured origins (prevents wildcard + credentials security conflict)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include webhook route
+# Include API routes
 app.include_router(webhook.router)
+app.include_router(auth.router)
+app.include_router(dashboard.router)
+
 
 @app.get("/")
 async def root():
@@ -35,6 +38,7 @@ async def root():
         "status": "healthy",
         "env": settings.APP_ENV
     }
+
 
 if __name__ == "__main__":
     import uvicorn

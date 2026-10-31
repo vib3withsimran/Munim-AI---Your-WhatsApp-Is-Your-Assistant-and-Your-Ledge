@@ -44,7 +44,7 @@ export default function LandingNav() {
         {/* Right CTA */}
         <div className="hidden md:flex items-center gap-4">
           <Link
-            href="/dashboard"
+            href="/login"
             className="text-xs sm:text-sm font-semibold text-[#BAC8C1] hover:text-[#F5F7F4] transition-colors"
           >
             Login

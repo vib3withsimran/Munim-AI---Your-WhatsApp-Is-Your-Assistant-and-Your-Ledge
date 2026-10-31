@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 import SplineChart from "@/components/SplineChart";
 
 const MOBILE_MONTH_DATA = [
@@ -20,6 +21,7 @@ const TODAY_TIMELINE = [
 ];
 
 export default function MobileDashboardPage() {
+  const { businessName, sellerInitial } = useAuth();
   const [activeTab, setActiveTab] = useState("Home");
 
   return (
@@ -55,7 +57,7 @@ export default function MobileDashboardPage() {
 
             {/* Avatar */}
             <div className="w-8 h-8 rounded-full bg-[#161e19] border border-[rgba(78,250,114,0.25)] flex items-center justify-center text-xs font-bold text-[#4efa72]">
-              N
+              {sellerInitial}
             </div>
 
             {/* Theme Toggle */}
@@ -69,7 +71,7 @@ export default function MobileDashboardPage() {
         <div className="px-5 pt-3 pb-2 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-[#f0fdf4] flex items-center gap-1.5">
-              Namaste Neha! 👋
+              Namaste {businessName}! 👋
             </h1>
             <p className="text-xs text-[#9db8a0] mt-0.5">Aaj ka business yahan dekhiye.</p>
           </div>
