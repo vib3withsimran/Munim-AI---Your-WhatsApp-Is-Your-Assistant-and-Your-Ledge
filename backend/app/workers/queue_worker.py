@@ -197,3 +197,4 @@ def get_queue_worker() -> QueueWorker:
     if _default_worker is None:
         _default_worker = QueueWorker()
     return _default_worker
+
