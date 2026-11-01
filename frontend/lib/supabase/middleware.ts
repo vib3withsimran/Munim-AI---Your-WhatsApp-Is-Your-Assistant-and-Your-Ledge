@@ -1,19 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { env } from "@/lib/env";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   });
 
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    "https://yomqkdgofwsmzrpbxxag.supabase.co";
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    "sb_publishable_0GCSSdcJzjRl7mu8ZBq33g_nhq2Yncm";
-
-  const supabase = createServerClient(url, key, {
+  const supabase = createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -32,31 +26,41 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Refresh auth token
+  // Validate and refresh authentication session using Supabase SSR
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Protect /dashboard and /mobile routes: redirect unauthenticated users to /login
-  if (!user && (pathname.startsWith("/dashboard") || pathname.startsWith("/mobile"))) {
+  // Protected application routes
+  const isProtectedRoute =
+    pathname.startsWith("/dashboard") || pathname.startsWith("/mobile");
+
+  // Public authentication routes
+  const isAuthRoute =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/forgot-password";
+
+  // 1. Unauthenticated users attempting to access protected routes -> redirect to login with destination preserved
+  if (!user && isProtectedRoute) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("redirect", pathname);
+    redirectUrl.search = `redirect=${encodeURIComponent(pathname + request.nextUrl.search)}`;
 
     const redirectResponse = NextResponse.redirect(redirectUrl);
-    // Copy cookies so any refreshed session or cleared cookie isn't lost
     supabaseResponse.cookies.getAll().forEach((c) => {
       redirectResponse.cookies.set(c.name, c.value, c);
     });
     return redirectResponse;
   }
 
-  // Redirect authenticated sellers away from /login and /signup to /dashboard
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // 2. Authenticated users visiting auth routes -> redirect directly to dashboard
+  if (user && isAuthRoute) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/dashboard";
+    redirectUrl.search = "";
 
     const redirectResponse = NextResponse.redirect(redirectUrl);
     supabaseResponse.cookies.getAll().forEach((c) => {
