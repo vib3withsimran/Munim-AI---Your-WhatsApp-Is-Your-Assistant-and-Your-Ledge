@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
+import { env } from "@/lib/env";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = env.apiUrl;
 
 // --- Types matching FastAPI / Supabase Schemas ---
 
@@ -156,7 +156,7 @@ async function fetchWithAuth<T>(
   }
 
   if (response.status === 401) {
-    // Session expired or invalid
+    // Session expired or unauthorized
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("munim:unauthorized"));
     }
@@ -169,7 +169,7 @@ async function fetchWithAuth<T>(
       const errJson = await response.json();
       errorDetail = errJson.detail || errJson.message || errorDetail;
     } catch {
-      // response wasn't JSON
+      // response was not JSON
     }
     throw new ApiError(errorDetail, response.status);
   }
@@ -177,7 +177,7 @@ async function fetchWithAuth<T>(
   return response.json();
 }
 
-// --- Dashboard API Client ---
+// --- Dashboard & Seller API Client ---
 
 export const api = {
   getSummary: () => fetchWithAuth<DashboardSummaryResponse>("/dashboard/summary"),
@@ -190,5 +190,11 @@ export const api = {
     fetchWithAuth<SellerProfile>("/auth/me", {
       method: "PATCH",
       body: JSON.stringify(data),
+    }),
+  logoutBackend: () =>
+    fetchWithAuth<{ success: boolean; message: string }>("/auth/logout", {
+      method: "POST",
+    }).catch(() => {
+      // Non-blocking server signout cleanup
     }),
 };
