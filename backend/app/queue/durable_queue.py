@@ -39,6 +39,11 @@ class DurableQueue:
         """Creates the queue_jobs table if it does not already exist."""
         conn = self._get_connection()
         try:
+            if not self._is_mem:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL;")
+                except Exception:
+                    pass
             with conn:
                 conn.execute("""
                 CREATE TABLE IF NOT EXISTS queue_jobs (

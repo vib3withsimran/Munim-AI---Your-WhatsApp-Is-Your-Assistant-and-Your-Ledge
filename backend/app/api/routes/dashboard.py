@@ -108,3 +108,52 @@ async def dashboard_breakdown(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve dashboard breakdown data."
         )
+
+
+@router.post("/payments/{payment_id}/approve")
+async def approve_payment(
+    payment_id: str,
+    seller: AuthenticatedSeller = Depends(get_current_seller)
+):
+    """
+    Approves a pending payment claim:
+    1. Sets payment status to verified in Supabase.
+    2. Enqueues outbound confirmation to customer on WhatsApp via Phase 5 DurableQueue.
+    """
+    try:
+        from backend.app.services.payments import approve_payment_claim
+        from backend.app.queue import get_durable_queue, JobType
+
+        res = await approve_payment_claim(seller.id, payment_id)
+        customer_phone = res.get("customer_phone")
+        if customer_phone:
+            q = get_durable_queue()
+            q.enqueue(JobType.PAYMENT_APPROVED_ALERT, {
+                "to_phone": customer_phone,
+                "amount": res.get("amount", 0.0),
+                "order_id": res.get("order_id")
+            })
+            logger.info(f"Enqueued PAYMENT_APPROVED_ALERT to {customer_phone} for payment {payment_id}")
+
+        return {"status": "success", "message": f"Payment {payment_id} approved.", "details": res}
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error approving payment {payment_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to approve payment claim.")
+
+
+@router.post("/payments/{payment_id}/reject")
+async def reject_payment(
+    payment_id: str,
+    reason: str = Query(default="Payment verification failed"),
+    seller: AuthenticatedSeller = Depends(get_current_seller)
+):
+    """Rejects an unverified payment claim."""
+    try:
+        from backend.app.services.payments import reject_payment_claim
+        res = await reject_payment_claim(seller.id, payment_id, reason=reason)
+        return {"status": "success", "message": f"Payment {payment_id} rejected.", "details": res}
+    except Exception as e:
+        logger.error(f"Error rejecting payment {payment_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reject payment claim.")

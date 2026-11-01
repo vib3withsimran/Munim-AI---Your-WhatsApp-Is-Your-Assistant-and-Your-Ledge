@@ -164,14 +164,17 @@ To decouple heavy background jobs, scheduled digests, and outbound notifications
 - **Worker Daemon (`backend/app/workers/queue_worker.py`)**:
   - Starts automatically on backend startup via the FastAPI lifespan hook.
   - Job Types supported:
-    - `OUTBOUND_WHATSAPP`: Outbound customer & seller messaging via Twilio REST API.
-    - `PAYMENT_APPROVED_ALERT`: Triggered when seller approves payment on the dashboard.
+    - `OUTBOUND_WHATSAPP`: Outbound customer & seller messaging via Twilio REST API (automatically enqueued on low-confidence escalation or new payment claim).
+    - `PAYMENT_APPROVED_ALERT`: Triggered when seller approves payment on the dashboard (`POST /dashboard/payments/{payment_id}/approve`), dispatching confirmation to buyer.
     - `DAILY_DUES_DIGEST`: Computes hisaab report and dispatches morning digest to owner.
     - `INCOMING_HEAVY_MESSAGE`: Processes long multimodal audio or image analysis asynchronously.
 - **Queue REST API (`backend/app/api/routes/queue.py`)**:
   - `GET /queue/status`: Real-time pending, processing, completed, and failed counts.
   - `GET /queue/jobs`: Paginated recent job history.
   - `POST /queue/retry-failed`: 1-click retry for all failed tasks.
+- **Dashboard Payment Actions (`backend/app/api/routes/dashboard.py`)**:
+  - `POST /dashboard/payments/{payment_id}/approve`: Commits verified claim in Supabase and enqueues customer WhatsApp confirmation via `DurableQueue`.
+  - `POST /dashboard/payments/{payment_id}/reject`: Rejects unverified claim.
 
 ---
 
