@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from backend.app.core.supabase_client import get_supabase_client
+from backend.app.services.database_service import get_active_seller_id
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,10 @@ async def create_with_stock_reservation(
     order_uuid = str(uuid.uuid4())
     display_order_id = f"ORD-{order_uuid[:6].upper()}"
 
+    effective_seller_id = get_active_seller_id() if seller_id == "default_seller" else seller_id
     order_record = {
         "id": order_uuid,
-        "seller_id": seller_id,
+        "seller_id": effective_seller_id,
         "customer_id": customer_id,
         "total_amount": total_amount,
         "status": "pending_payment",
@@ -58,25 +60,27 @@ async def create_with_stock_reservation(
 
     # 2. Persist to Supabase
     try:
+        import asyncio
         supabase = get_supabase_client()
-        # Insert into orders table
-        supabase.table("orders").insert(order_record).execute()
+        loop = asyncio.get_running_loop()
 
-        # Insert order items
-        order_items_records = [
-            {
-                "order_id": order_uuid,
-                "product_id": pi["product_id"],
-                "quantity": pi["quantity"],
-                "unit_price": pi["unit_price"]
-            }
-            for pi in processed_items
-        ]
-        try:
-            supabase.table("order_items").insert(order_items_records).execute()
-        except Exception as e:
-            logger.warning(f"Could not write order_items to Supabase ({e}); order header saved.")
+        def _persist_order():
+            supabase.table("orders").insert(order_record).execute()
+            order_items_records = [
+                {
+                    "order_id": order_uuid,
+                    "product_id": pi["product_id"],
+                    "quantity": pi["quantity"],
+                    "unit_price": pi["unit_price"]
+                }
+                for pi in processed_items
+            ]
+            try:
+                supabase.table("order_items").insert(order_items_records).execute()
+            except Exception as e:
+                logger.warning(f"Could not write order_items to Supabase ({e}); order header saved.")
 
+        await asyncio.wait_for(loop.run_in_executor(None, _persist_order), timeout=2.0)
     except Exception as e:
         logger.warning(f"Supabase order creation fallback to local record ({e})")
 
@@ -100,12 +104,13 @@ async def find_payment_match(
     """
     Finds a pending or unpaid order for a customer that matches the payment amount.
     """
+    effective_seller_id = get_active_seller_id() if seller_id == "default_seller" else seller_id
     try:
         supabase = get_supabase_client()
         res = (
             supabase.table("orders")
             .select("*")
-            .eq("seller_id", seller_id)
+            .eq("seller_id", effective_seller_id)
             .eq("customer_id", customer_id)
             .in_("status", ["pending_payment", "pending", "unpaid"])
             .order("created_at", desc=True)
@@ -134,12 +139,13 @@ async def get_customer_orders(seller_id: str, customer_id: str) -> List[Dict[str
     """
     Retrieves recent orders for a customer to answer delivery/tracking queries.
     """
+    effective_seller_id = get_active_seller_id() if seller_id == "default_seller" else seller_id
     try:
         supabase = get_supabase_client()
         res = (
             supabase.table("orders")
             .select("*")
-            .eq("seller_id", seller_id)
+            .eq("seller_id", effective_seller_id)
             .eq("customer_id", customer_id)
             .order("created_at", desc=True)
             .limit(5)

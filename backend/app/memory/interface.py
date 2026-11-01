@@ -37,3 +37,4 @@ class MemoryEngine(ABC):
     ) -> Dict[str, Any]:
         """Promotes an approved memory into durable business knowledge."""
         pass
+

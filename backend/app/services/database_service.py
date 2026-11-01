@@ -1,10 +1,44 @@
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from backend.app.core.supabase_client import get_supabase_client
+from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_active_seller_uuid: Optional[str] = None
+
+def get_active_seller_id() -> str:
+    """
+    Resolves the active seller's UUID for database foreign-key operations.
+    1. Looks up 'profiles' where phone == OWNER_WHATSAPP_NUMBER.
+    2. Fallback to the first existing profile in the table.
+    3. Fallback to a valid default UUID format ("00000000-0000-0000-0000-000000000001").
+    """
+    global _active_seller_uuid
+    if _active_seller_uuid:
+        return _active_seller_uuid
+
+    try:
+        supabase = get_supabase_client()
+        owner_phone = settings.OWNER_WHATSAPP_NUMBER.replace("+", "").strip()
+        if owner_phone:
+            res = supabase.table("profiles").select("id").eq("phone", owner_phone).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                _active_seller_uuid = str(res.data[0]["id"])
+                return _active_seller_uuid
+
+        # Try any registered profile in DB
+        res_all = supabase.table("profiles").select("id").limit(1).execute()
+        if res_all.data and len(res_all.data) > 0:
+            _active_seller_uuid = str(res_all.data[0]["id"])
+            return _active_seller_uuid
+    except Exception as e:
+        logger.warning(f"Could not resolve seller UUID from Supabase profiles: {e}")
+
+    _active_seller_uuid = "00000000-0000-0000-0000-000000000001"
+    return _active_seller_uuid
 
 
 def _validate_seller_id(seller_id: str) -> None:

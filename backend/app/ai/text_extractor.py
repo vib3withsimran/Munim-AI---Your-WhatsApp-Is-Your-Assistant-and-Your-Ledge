@@ -91,7 +91,7 @@ async def extract_text(
         try:
             groq_url = "https://api.groq.com/openai/v1/chat/completions"
             groq_payload = {
-                "model": "openai/gpt-oss-20b",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [
                     {"role": "system", "content": TEXT_EXTRACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
@@ -99,7 +99,7 @@ async def extract_text(
                 "temperature": 0.1,
                 "response_format": {"type": "json_object"}
             }
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.post(
                     groq_url,
                     json=groq_payload,

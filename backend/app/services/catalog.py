@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from backend.app.core.supabase_client import get_supabase_client
+from backend.app.services.database_service import get_active_seller_id
 
 logger = logging.getLogger(__name__)
 
@@ -51,18 +52,28 @@ async def get_active_catalog(seller_id: str = "default_seller", force_refresh: b
     Prevents repeated network queries and drops latency to < 1ms on cache hits.
     """
     now = time.time()
-    cached = _CATALOG_CACHE.get(seller_id)
+    effective_seller_id = get_active_seller_id() if seller_id == "default_seller" else seller_id
+    cached = _CATALOG_CACHE.get(effective_seller_id)
     if not force_refresh and cached and (now - cached["timestamp"] < CACHE_TTL_SECONDS):
         return cached["products"]
 
     try:
+        import asyncio
         supabase = get_supabase_client()
-        res = (
-            supabase.table("products")
-            .select("*")
-            .eq("seller_id", seller_id)
-            .eq("is_active", True)
-            .execute()
+
+        def _fetch_db():
+            return (
+                supabase.table("products")
+                .select("*")
+                .eq("seller_id", effective_seller_id)
+                .eq("is_active", True)
+                .execute()
+            )
+
+        loop = asyncio.get_running_loop()
+        res = await asyncio.wait_for(
+            loop.run_in_executor(None, _fetch_db),
+            timeout=1.5
         )
         products = res.data or []
         if not products:
@@ -72,7 +83,7 @@ async def get_active_catalog(seller_id: str = "default_seller", force_refresh: b
         logger.warning(f"Could not fetch catalog from Supabase ({e}), using default catalog cache.")
         products = DEFAULT_STORE_CATALOG
 
-    _CATALOG_CACHE[seller_id] = {
+    _CATALOG_CACHE[effective_seller_id] = {
         "timestamp": now,
         "products": products
     }

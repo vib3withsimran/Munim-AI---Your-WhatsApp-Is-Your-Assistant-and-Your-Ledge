@@ -86,7 +86,8 @@ class MekoAdapter(MemoryEngine):
         limit: int = 5
     ) -> List[str]:
         """
-        Recalls customer preferences or facts from Meko memory.
+        Recalls customer preferences or facts from Meko memory with strict 2.5s cap
+        to prevent Twilio WhatsApp webhook timeouts.
         """
         if not self.enabled or not self.api_key:
             return []
@@ -101,7 +102,8 @@ class MekoAdapter(MemoryEngine):
             "limit": limit
         }
 
-        result = await self._call_mcp_tool("memory_search", args, timeout=12.0)
+        # Strict 2.5s timeout for WhatsApp real-time turnaround
+        result = await self._call_mcp_tool("memory_search", args, timeout=2.5)
         items: List[str] = []
 
         if isinstance(result, dict) and "results" in result:

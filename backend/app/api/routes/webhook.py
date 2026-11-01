@@ -8,6 +8,7 @@ from backend.app.core.config import settings
 from backend.app.services.db import is_duplicate_message, record_processed_message
 from backend.app.ai import extract_text, extract_audio, extract_image
 from backend.app.agents import Orchestrator
+from backend.app.services.database_service import get_active_seller_id
 from backend.app.services.sheets import (
     add_or_update_customer,
     add_order,
@@ -20,13 +21,47 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 orchestrator = Orchestrator()
 
-# Fast greeting dictionary to respond instantaneously (< 10ms) without invoking any LLM
-FAST_GREETINGS = {
-    "hi", "hii", "hiiii", "hello", "hello ji", "hey", "heyy",
-    "namaste", "namaste ji", "pranam",
-    "kaise ho", "kaise ho aap", "kaise ho aap log", "kya haal hai", "kya hal hai",
-    "good morning", "good evening", "good afternoon"
+GREETING_TOKENS = {
+    "hi", "hii", "hiii", "hiiii", "hello", "hellow", "hey", "heyy",
+    "namaste", "namasteji", "namaskar", "pranam",
+    "kaise", "kya", "haal", "chal", "theek", "ho",
+    "good", "morning", "afternoon", "evening",
+    "bhaiya", "bhai", "sir", "mam", "ji", "aap", "dost"
 }
+
+TRANSACTIONAL_KEYWORDS = {
+    "order", "pack", "chahiye", "bhejo", "bhej", "book", "lena",
+    "kurti", "saree", "suit", "dress", "size", "color", "colour", "item",
+    "product", "catalog", "catalogue", "design", "designs", "photo", "pic", "pics",
+    "rate", "price", "kitna", "kitne", "paisa", "rupee", "rs", "cost",
+    "payment", "upi", "pay", "paid", "screenshot", "advance", "dues", "hisaab",
+    "gpay", "phonepe", "paytm", "parcel", "delivery", "track", "dispatch",
+    "same", "purani", "pichli", "again", "repeat", "available", "stock",
+    "complaint", "return", "exchange", "refund", "damage", "kharab", "galat",
+    "summary"
+}
+
+def is_conversational_greeting(raw_text: str) -> bool:
+    """Intelligently detects pure greetings with zero business intent in <1ms."""
+    clean = raw_text.lower().strip()
+    if not clean:
+        return True
+
+    clean_no_punct = "".join(c for c in clean if c.isalnum() or c.isspace()).strip()
+    words = clean_no_punct.split()
+    if not words:
+        return True
+
+    # If any transactional or business keyword exists, route to AI / Agents
+    if any(kw in clean_no_punct for kw in TRANSACTIONAL_KEYWORDS):
+        return False
+
+    # If short conversational message containing greeting tokens, it's a greeting
+    greeting_count = sum(1 for w in words if w in GREETING_TOKENS)
+    if len(words) <= 6 and greeting_count >= 1:
+        return True
+
+    return False
 
 def build_twiml_response(reply_text: str) -> Response:
     """Builds standard TwiML XML response for Twilio WhatsApp (bypasses ContentSid restriction)."""
@@ -180,9 +215,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         return build_twiml_response("🔓 Munim AI assistant resumed for this chat.")
 
     # 4. Instant Fast-Path for Conversational Greetings (< 10ms turnaround)
-    clean_text = raw_text.lower().strip()
-    clean_no_punct = "".join(c for c in clean_text if c.isalnum() or c.isspace()).strip()
-    if msg_type == "text" and (clean_text in FAST_GREETINGS or clean_no_punct in FAST_GREETINGS or not clean_text):
+    if msg_type == "text" and is_conversational_greeting(raw_text):
         name_disp = contact_name or "Ji"
         fast_reply = (
             f"Namaste {name_disp}! 🙏 Munim AI par aapka swagat hai.\n\n"
@@ -192,7 +225,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
             f"• UPI payment screenshot bhej sakte hain\n\n"
             f"Bataiye, aaj aapko kya dekhna hai?"
         )
-        logger.info(f"Instant greeting fast-path triggered for {sender_phone} (<10ms)")
+        logger.info(f"Instant greeting fast-path triggered for {sender_phone} (<5ms)")
         return build_twiml_response(fast_reply)
 
     # 5. Check for Owner Commands (summary, pending dues)
@@ -241,8 +274,9 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     logger.info(f"Extracted intent for {sender_phone}: {extracted.type} (confidence: {extracted.confidence.overall})")
 
     # 7. Route through Phase 3 Orchestrator & Agents
+    seller_uuid = get_active_seller_id()
     context = {
-        "seller_id": "default_seller",
+        "seller_id": seller_uuid,
         "customer_id": sender_phone,
         "customer_name": contact_name or extracted.customer_name or "Ji"
     }

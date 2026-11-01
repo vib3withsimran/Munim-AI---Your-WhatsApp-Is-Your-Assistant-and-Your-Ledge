@@ -38,9 +38,12 @@ class CustomerAgent:
         msg_type = message.type
         lower_txt = message.raw_text.lower()
 
-        # 0. Meko Long-Term Memory Recall (Returning Customer Preferences)
+        # Check if customer is asking about previous or 'same wali' order
+        is_repeat_inquiry = any(w in lower_txt for w in ["same", "purani", "pichli", "phir se", "again", "repeat", "last time", "favourite", "favorite"])
+
+        # 0. Meko Long-Term Memory Recall (Returning Customer Preferences) - Only on repeat queries
         memories = []
-        if self.memory_engine:
+        if is_repeat_inquiry and self.memory_engine:
             try:
                 memories = await self.memory_engine.recall(
                     datapack="customer",
@@ -49,8 +52,6 @@ class CustomerAgent:
             except Exception as e:
                 logger.warning(f"Meko memory recall skipped: {e}")
 
-        # Check if customer is asking about previous or 'same wali' order
-        is_repeat_inquiry = any(w in lower_txt for w in ["same", "purani", "pichli", "phir se", "again", "repeat"])
         if is_repeat_inquiry:
             if memories:
                 # Meko ON: Personalized response from recalled memory
