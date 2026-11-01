@@ -8,13 +8,7 @@ from backend.app.core.config import settings
 from backend.app.services.db import is_duplicate_message, record_processed_message
 from backend.app.ai import extract_text, extract_audio, extract_image
 from backend.app.agents import Orchestrator
-from backend.app.services.database_service import get_active_seller_id
-from backend.app.services.sheets import (
-    add_or_update_customer,
-    add_order,
-    add_payment,
-    get_store_summary
-)
+from backend.app.services.database_service import get_active_seller_id, get_or_create_customer_uuid
 from backend.app.utils.privacy import check_privacy
 
 logger = logging.getLogger(__name__)
@@ -93,22 +87,6 @@ async def verify_webhook(
         "service": "Munim AI Twilio & WhatsApp Webhook",
         "time": datetime.now().isoformat()
     }
-
-
-def background_sync_sheets(extracted, sender_phone: str, customer_display_name: str):
-    """Executes Google Sheets synchronization in the background as a safe backup."""
-    try:
-        add_or_update_customer(
-            phone=sender_phone,
-            name=customer_display_name,
-            status="active"
-        )
-        if extracted.type == "order":
-            add_order(extracted)
-        elif extracted.type in ["payment", "partial_payment"]:
-            add_payment(extracted)
-    except Exception as e:
-        logger.error(f"Error in background Google Sheets sync: {e}")
 
 
 async def fetch_twilio_media(media_url: str) -> Optional[bytes]:
@@ -231,8 +209,9 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     # 5. Check for Owner Commands (summary, pending dues)
     clean_sender = sender_phone.replace("+", "").strip()
     clean_owner = settings.OWNER_WHATSAPP_NUMBER.replace("+", "").strip()
+    seller_uuid = get_active_seller_id()
     if clean_sender and clean_sender == clean_owner and clean_text in ["summary", "pending dues", "dues", "hisaab"]:
-        summary_text = get_store_summary()
+        summary_text = await orchestrator.finance_agent.get_summary_report(seller_uuid)
         return build_twiml_response(summary_text)
 
     # 6. Multimodal Extraction Pipeline (Groq for Text, Gemini for Audio & Images)
@@ -275,23 +254,16 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # 7. Route through Phase 3 Orchestrator & Agents
     seller_uuid = get_active_seller_id()
+    customer_uuid = get_or_create_customer_uuid(seller_uuid, sender_phone, contact_name)
     context = {
         "seller_id": seller_uuid,
-        "customer_id": sender_phone,
+        "customer_id": customer_uuid,
+        "customer_phone": sender_phone,
         "customer_name": contact_name or extracted.customer_name or "Ji"
     }
     execution_result = await orchestrator.route_and_execute(extracted, context)
 
-    # 8. Background Safety Sync to Google Sheets
-    customer_display_name = extracted.customer_name or contact_name
-    background_tasks.add_task(
-        background_sync_sheets,
-        extracted=extracted,
-        sender_phone=sender_phone,
-        customer_display_name=customer_display_name
-    )
-
-    # 9. Return Instant TwiML XML Response to Customer
+    # 8. Return Instant TwiML XML Response to Customer
     reply_text = execution_result.get("reply", "")
     if reply_text:
         logger.info(f"Delivering reply via {execution_result.get('agent_used')}: {reply_text[:60]}...")

@@ -123,3 +123,18 @@ def get_catalog(seller_id: str) -> list[dict[str, Any]]:
     )
 
     return response.data or []
+
+
+def get_or_create_customer_uuid(seller_id: str, phone: str, name: Optional[str] = None) -> str:
+    """Finds or creates a customer by phone and returns their valid Supabase UUID."""
+    import uuid
+    try:
+        cust = get_customer_by_phone(seller_id, phone)
+        if cust and "id" in cust:
+            return str(cust["id"])
+        new_cust = create_customer(seller_id, phone, name=name)
+        if new_cust and "id" in new_cust:
+            return str(new_cust["id"])
+    except Exception as e:
+        logger.warning(f"Could not get or create customer in Supabase ({e}); fallback to deterministic UUID.")
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{seller_id}:{phone}"))

@@ -86,35 +86,36 @@ async def extract_text(
     if context:
         user_prompt += f"\nAdditional Store/Catalog Context:\n{context}"
 
-    # 1. Fast-Path: Groq API
+    # 1. Fast-Path: Groq API (qwen/qwen3.8-27b ~400ms turnaround)
     if settings.GROQ_API_KEY:
-        try:
-            groq_url = "https://api.groq.com/openai/v1/chat/completions"
-            groq_payload = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": TEXT_EXTRACTION_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": 0.1,
-                "response_format": {"type": "json_object"}
-            }
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.post(
-                    groq_url,
-                    json=groq_payload,
-                    headers={
-                        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-                        "Content-Type": "application/json"
-                    }
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    parsed = json.loads(data["choices"][0]["message"]["content"].strip())
-                    logger.info("Text extraction succeeded via Groq fast-path.")
-                    return normalize_message(parsed, "text", customer_phone, raw_text, message_id, timestamp)
-        except Exception as e:
-            logger.warning(f"Groq text extraction fallback to Gemini: {e}")
+        for groq_model in ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
+            try:
+                groq_url = "https://api.groq.com/openai/v1/chat/completions"
+                groq_payload = {
+                    "model": groq_model,
+                    "messages": [
+                        {"role": "system", "content": TEXT_EXTRACTION_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.1,
+                    "response_format": {"type": "json_object"}
+                }
+                async with httpx.AsyncClient(timeout=3.5) as client:
+                    resp = await client.post(
+                        groq_url,
+                        json=groq_payload,
+                        headers={
+                            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                            "Content-Type": "application/json"
+                        }
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        parsed = json.loads(data["choices"][0]["message"]["content"].strip())
+                        logger.info(f"Text extraction succeeded via Groq fast-path ({groq_model}).")
+                        return normalize_message(parsed, "text", customer_phone, raw_text, message_id, timestamp)
+            except Exception as e:
+                logger.warning(f"Groq text extraction ({groq_model}) attempt error: {e}")
 
     # 2. Multimodal Fallback: Gemini API
     parsed = await call_gemini(

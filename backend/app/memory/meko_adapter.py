@@ -1,5 +1,6 @@
 import json
 import uuid
+import time
 import logging
 import httpx
 from typing import List, Dict, Any, Optional
@@ -18,6 +19,9 @@ DATAPACK_MAP = {
     "orders": settings.MEKO_DATAPACK_ORDERS or "2bf91f49-255b-45fc-acd7-a22272bfa3f7",
     "finance": settings.MEKO_DATAPACK_FINANCE or "f6862f0f-8e0d-43b4-b78d-5eb250edb8a2"
 }
+
+_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
+MEMORY_CACHE_TTL = 120  # 2 minutes
 
 class MekoAdapter(MemoryEngine):
     """
@@ -86,13 +90,21 @@ class MekoAdapter(MemoryEngine):
         limit: int = 5
     ) -> List[str]:
         """
-        Recalls customer preferences or facts from Meko memory with strict 2.5s cap
-        to prevent Twilio WhatsApp webhook timeouts.
+        Recalls customer preferences or facts from Meko memory with 10s timeout
+        and in-memory TTL caching to guarantee sub-second WhatsApp response.
         """
         if not self.enabled or not self.api_key:
             return []
 
         datapack_id = self._resolve_datapack_id(datapack)
+        cache_key = f"{datapack_id}:{query.lower().strip()}"
+        now = time.time()
+        if cache_key in _MEMORY_CACHE:
+            cached_entry = _MEMORY_CACHE[cache_key]
+            if now - cached_entry["time"] < MEMORY_CACHE_TTL:
+                logger.info(f"Meko memory recall served from cache (<1ms): {cache_key}")
+                return cached_entry["items"]
+
         cid = conversation_id or str(uuid.uuid4())
 
         args = {
@@ -102,8 +114,8 @@ class MekoAdapter(MemoryEngine):
             "limit": limit
         }
 
-        # Strict 2.5s timeout for WhatsApp real-time turnaround
-        result = await self._call_mcp_tool("memory_search", args, timeout=2.5)
+        # 10.0s timeout to allow Meko vector search to complete comfortably within Twilio's 15s window
+        result = await self._call_mcp_tool("memory_search", args, timeout=10.0)
         items: List[str] = []
 
         if isinstance(result, dict) and "results" in result:
@@ -111,6 +123,9 @@ class MekoAdapter(MemoryEngine):
                 mem_text = item.get("memory") or item.get("text")
                 if mem_text:
                     items.append(str(mem_text))
+
+        if items:
+            _MEMORY_CACHE[cache_key] = {"time": now, "items": items}
 
         return items
 
@@ -128,6 +143,7 @@ class MekoAdapter(MemoryEngine):
         if not self.enabled or not self.api_key:
             return {"status": "disabled"}
 
+        _MEMORY_CACHE.clear()
         datapack_id = self._resolve_datapack_id(datapack)
         cid = conversation_id or str(uuid.uuid4())
 

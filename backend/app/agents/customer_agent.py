@@ -38,6 +38,8 @@ class CustomerAgent:
         msg_type = message.type
         lower_txt = message.raw_text.lower()
 
+        cust_phone = context.get("customer_phone") or message.customer_phone or customer_id
+
         # Check if customer is asking about previous or 'same wali' order
         is_repeat_inquiry = any(w in lower_txt for w in ["same", "purani", "pichli", "phir se", "again", "repeat", "last time", "favourite", "favorite"])
 
@@ -47,7 +49,7 @@ class CustomerAgent:
             try:
                 memories = await self.memory_engine.recall(
                     datapack="customer",
-                    query=f"Customer {customer_id} preferences"
+                    query=f"Customer {cust_phone} preferences"
                 )
             except Exception as e:
                 logger.warning(f"Meko memory recall skipped: {e}")

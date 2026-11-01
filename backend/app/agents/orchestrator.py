@@ -20,7 +20,7 @@ class Orchestrator:
     def __init__(self, memory_enabled: bool = True):
         self.meko = get_meko_adapter(enabled=memory_enabled)
         self.customer_agent = CustomerAgent(memory_engine=self.meko)
-        self.order_agent = OrderAgent()
+        self.order_agent = OrderAgent(memory_engine=self.meko)
         self.finance_agent = FinanceAgent()
 
     async def route_and_execute(
