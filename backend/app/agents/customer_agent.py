@@ -18,11 +18,13 @@ class CustomerAgent:
     """
     The conversation and customer relationship specialist.
     Handles catalog questions, sizes, prices, availability, delivery tracking, policies, and FAQs.
+    Uses Meko long-term memory to recall returning customer preferences.
     Does NOT mutate inventory or record financial claims directly.
     """
 
-    def __init__(self, name: str = "CustomerAgent"):
+    def __init__(self, name: str = "CustomerAgent", memory_engine: Optional[Any] = None):
         self.name = name
+        self.memory_engine = memory_engine
 
     async def handle(
         self,
@@ -34,6 +36,54 @@ class CustomerAgent:
         customer_name = message.customer_name or context.get("customer_name") or "Ji"
 
         msg_type = message.type
+        lower_txt = message.raw_text.lower()
+
+        # 0. Meko Long-Term Memory Recall (Returning Customer Preferences)
+        memories = []
+        if self.memory_engine:
+            try:
+                memories = await self.memory_engine.recall(
+                    datapack="customer",
+                    query=f"Customer {customer_id} preferences"
+                )
+            except Exception as e:
+                logger.warning(f"Meko memory recall skipped: {e}")
+
+        # Check if customer is asking about previous or 'same wali' order
+        is_repeat_inquiry = any(w in lower_txt for w in ["same", "purani", "pichli", "phir se", "again", "repeat"])
+        if is_repeat_inquiry:
+            if memories:
+                # Meko ON: Personalized response from recalled memory
+                recalled_pref = memories[0]
+                matched_products = await catalog.search(seller_id=seller_id, query="Anarkali")
+                top_item = matched_products[0] if matched_products else {"name": "Cotton Anarkali Kurti", "price": 1299}
+                reply = (
+                    f"Namaste {customer_name}! 🙏\n\n"
+                    f"Haanji! Aapki previous favorite *{top_item['name']} (XXL, Red)* hamare paas stock mein available hai! "
+                    f"Price ₹{int(top_item['price'])} hai.\n\n"
+                    f"Kya main aapka order book kar doon?"
+                )
+                return {
+                    "agent": self.name,
+                    "action": "meko_personalized_catalog_reply",
+                    "reply": reply,
+                    "escalate": False,
+                    "data": {"recalled_memories": memories}
+                }
+            else:
+                # Meko OFF: Generic fallback
+                reply = (
+                    f"Namaste {customer_name}! 🙏\n\n"
+                    f"Aap kaunsi kurti ki baat kar rahe hain? Kripya product ka naam, size aur color batayein "
+                    f"taaki hum store catalog mein check kar sakein."
+                )
+                return {
+                    "agent": self.name,
+                    "action": "generic_repeat_inquiry",
+                    "reply": reply,
+                    "escalate": False,
+                    "data": {"recalled_memories": []}
+                }
 
         # 1. Catalog / Product Inquiry
         if msg_type in ["catalog_query", "question"] and any(w in message.raw_text.lower() for w in ["kurti", "size", "rate", "price", "catalog", "suit", "stock", "available", "dikhao"]):

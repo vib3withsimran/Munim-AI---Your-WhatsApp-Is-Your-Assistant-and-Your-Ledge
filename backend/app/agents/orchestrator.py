@@ -5,6 +5,7 @@ from backend.app.models.schemas import ExtractedMessage
 from backend.app.agents.customer_agent import CustomerAgent
 from backend.app.agents.order_agent import OrderAgent
 from backend.app.agents.finance_agent import FinanceAgent
+from backend.app.memory.meko_adapter import get_meko_adapter
 from backend.app.ai.response_generator import generate_owner_alert
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,9 @@ class Orchestrator:
     and routes by intent to specialized agents.
     """
 
-    def __init__(self):
-        self.customer_agent = CustomerAgent()
+    def __init__(self, memory_enabled: bool = True):
+        self.meko = get_meko_adapter(enabled=memory_enabled)
+        self.customer_agent = CustomerAgent(memory_engine=self.meko)
         self.order_agent = OrderAgent()
         self.finance_agent = FinanceAgent()
 
