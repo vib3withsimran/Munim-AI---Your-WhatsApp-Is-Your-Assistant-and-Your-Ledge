@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import time
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -199,8 +200,6 @@ def add_payment(extracted: ExtractedMessage) -> str:
         return ""
 
 
-import time
-
 _CATALOG_CACHE: Optional[List[Dict[str, Any]]] = None
 _CATALOG_CACHE_TIME: float = 0.0
 
@@ -263,7 +262,7 @@ def get_store_summary() -> str:
         total_orders = len(records)
         pending_orders = sum(1 for r in records if str(r.get("status", "")).lower() == "pending")
         paid_orders = sum(1 for r in records if str(r.get("status", "")).lower() == "paid")
-        
+
         total_sales = 0.0
         for r in records:
             try:

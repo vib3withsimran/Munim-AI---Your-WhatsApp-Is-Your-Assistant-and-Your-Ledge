@@ -52,7 +52,7 @@ def normalize_message(
                 qty = int(it.get("qty", 1))
             except (ValueError, TypeError):
                 qty = 1
-            
+
             unit_price = None
             if it.get("unit_price") is not None:
                 try:

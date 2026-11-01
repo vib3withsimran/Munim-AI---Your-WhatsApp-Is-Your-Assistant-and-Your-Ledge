@@ -7,7 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  test-and-lint:
+  backend-ci:
+    name: Backend Lint & Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
+          pip install ruff pytest
 
       - name: Syntax and Bytecode Compilation Check
         run: |
@@ -32,7 +33,13 @@ jobs:
 
       - name: Lint check with Ruff
         run: |
-          ruff check backend/app --ignore E501,F401,F841
+          python -m ruff check backend/app --select E,F,W --ignore E501,F401,F841
+
+      - name: Run Phase 1 Multimodal Extraction Tests
+        env:
+          DRY_RUN: "1"
+        run: |
+          python scripts/test_multimodal_extraction.py
 
       - name: Verify Webhook & App Initialisation
         env:
@@ -41,6 +48,40 @@ jobs:
           WHATSAPP_PHONE_NUMBER_ID: "mock_phone_id"
           WHATSAPP_ACCESS_TOKEN: "mock_token"
           WHATSAPP_VERIFY_TOKEN: "munim_verify_2026"
+          SUPABASE_URL: "https://mock.supabase.co"
+          SUPABASE_PUBLISHABLE_KEY: "mock_key_for_ci_pipeline"
         run: |
           python -c "from backend.app.main import app; print('Munim AI initialized cleanly in CI!')"
 
+  frontend-ci:
+    name: Frontend Build & Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11.0.9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          pnpm install
+
+      - name: Build Next.js production bundle
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "mock_key_for_ci_pipeline"
+        run: |
+          cd frontend
+          pnpm run build

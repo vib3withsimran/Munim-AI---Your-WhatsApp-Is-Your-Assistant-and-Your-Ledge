@@ -50,7 +50,7 @@ async def call_gemini(
     full_text = prompt
     if system_instruction:
         full_text = f"{system_instruction}\n\nTask:\n{prompt}"
-    
+
     parts.append({"text": full_text})
 
     payload = {
@@ -87,7 +87,7 @@ async def call_gemini(
                         if raw_text.endswith("```"):
                             raw_text = raw_text[:-3]
                         raw_text = raw_text.strip()
-                        
+
                         try:
                             parsed = json.loads(raw_text)
                             logger.info(f"Gemini generation succeeded with model: {model}")

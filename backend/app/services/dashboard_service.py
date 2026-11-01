@@ -382,11 +382,11 @@ def get_dashboard_activity(seller_id: str, db: Client) -> DashboardActivityRespo
     memories_today = 0
     memories_yesterday = 0
 
-    for l in logs:
-        l_date = _parse_iso(l.get("created_at")) or now
-        act = str(l.get("action", "")).lower()
-        etype = str(l.get("entity_type", "")).lower()
-        has_meko = bool(l.get("meko_operation"))
+    for log_item in logs:
+        l_date = _parse_iso(log_item.get("created_at")) or now
+        act = str(log_item.get("action", "")).lower()
+        etype = str(log_item.get("entity_type", "")).lower()
+        has_meko = bool(log_item.get("meko_operation"))
 
         is_msg = "message" in act or etype == "message"
         is_rem = "reminder" in act or etype == "reminder"
@@ -431,10 +431,10 @@ def get_dashboard_activity(seller_id: str, db: Client) -> DashboardActivityRespo
     all_logs: List[Dict[str, Any]] = memory_logs_res.data or []
 
     memory_highlights: List[MemoryHighlight] = []
-    for l in all_logs:
-        if l.get("meko_operation") or "memory" in str(l.get("action", "")).lower() or l.get("entity_type") == "memory":
-            meta_dict = l.get("metadata") or {}
-            text = meta_dict.get("summary") or meta_dict.get("text") or f"{l.get('agent_name', 'Munim')}: {l.get('action')}"
+    for log_item in all_logs:
+        if log_item.get("meko_operation") or "memory" in str(log_item.get("action", "")).lower() or log_item.get("entity_type") == "memory":
+            meta_dict = log_item.get("metadata") or {}
+            text = meta_dict.get("summary") or meta_dict.get("text") or f"{log_item.get('agent_name', 'Munim')}: {log_item.get('action')}"
             memory_highlights.append(
                 MemoryHighlight(
                     icon="✨",

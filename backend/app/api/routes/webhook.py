@@ -52,7 +52,7 @@ async def verify_webhook(
     if hub_mode == "subscribe" and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN:
         logger.info("Webhook verification handshake successful!")
         return Response(content=hub_challenge, media_type="text/plain", status_code=status.HTTP_200_OK)
-    
+
     return {
         "status": "online",
         "service": "Munim AI Twilio & WhatsApp Webhook",
@@ -120,7 +120,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         sender_phone = from_raw.replace("whatsapp:", "").replace("+", "").strip()
         contact_name = form_data.get("ProfileName", "")
         raw_text = form_data.get("Body", "").strip()
-        
+
         num_media = int(form_data.get("NumMedia", 0) or 0)
         if num_media > 0:
             media_content_type = form_data.get("MediaContentType0", "")

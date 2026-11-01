@@ -36,7 +36,7 @@ async def create_claim(
     try:
         supabase = get_supabase_client()
         supabase.table("payments").insert(payment_record).execute()
-        
+
         # If linked to order and status is verified, update order status
         if order_id and status == "verified":
             supabase.table("orders").update({"status": "completed"}).eq("id", order_id).execute()
