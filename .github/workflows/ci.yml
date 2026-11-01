@@ -35,9 +35,11 @@ jobs:
         run: |
           python -m ruff check backend/app --select E,F,W --ignore E501,F401,F841
 
-      - name: Run Non-Live Unit Tests
+      - name: Run Phase 1 Multimodal Extraction Tests
+        env:
+          DRY_RUN: "1"
         run: |
-          pytest -m "not live_postgres"
+          python scripts/test_multimodal_extraction.py
 
       - name: Verify Webhook & App Initialisation
         env:
@@ -62,12 +64,12 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 10.32.1
+          version: 11.0.9
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 

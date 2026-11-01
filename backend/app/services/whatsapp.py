@@ -22,7 +22,7 @@ async def send_whatsapp_message(to_phone: str, text: str) -> dict:
         sender_whatsapp = f"whatsapp:{sender_whatsapp}"
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.TWILIO_ACCOUNT_SID}/Messages.json"
-    
+
     auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
     data = {
         "From": sender_whatsapp,
