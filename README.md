@@ -141,16 +141,56 @@ Every message (text, audio, image) outputs a structured `ConfidenceScore`:
 
 ## ⚡ Latency & Speed Optimizations
 
-To comfortably beat Twilio's **15-second webhook timeout window**, Munim AI uses a 4-tier speed architecture:
+To comfortably beat Twilio's **15-second webhook timeout window**, Munim AI uses a 5-tier speed architecture:
 
-1. **Sub-10ms Fast-Path Greetings**:
-   - Over 18 common greetings (*"hi"*, *"kaise ho"*, *"namaste"*, *"hello ji"*, *"kya haal hai"*) are intercepted by an in-memory dictionary lookup. Response delivered in **< 10ms**.
-2. **In-Memory TTL Catalog Cache**:
-   - Product catalog is cached in memory with a 5-minute TTL. Eliminates repeated Google Sheets / database roundtrips, saving **2.5 to 4 seconds** per message.
-3. **Groq LPU Fast Path (< 1s)**:
-   - Plain text orders and inquiries run through Groq's `openai/gpt-oss-20b` endpoint with a 4.0s timeout, returning structured intents in **300ms to 800ms**.
-4. **Direct Twilio Binary Media Streaming**:
-   - Voice notes and images are streamed directly from Twilio's media servers into memory and passed to Gemini Multimodal models, avoiding disk I/O bottlenecks.
+1. **Sub-5ms Conversational Greeting Fast-Path**:
+   - `is_conversational_greeting()` recognizes compound greetings (*"hi"*, *"kaise ho"*, *"namaste ji"*, *"hello ji kaise ho"*, *"kya haal hai"*) using zero-intent token analysis. Delivers instant TwiML XML response in **< 5ms** without invoking any external API.
+2. **Groq LPU Fast Path (~450ms)**:
+   - Plain text orders and inquiries run through Groq's `qwen/qwen3.8-27b` endpoint with a 3.5s timeout, returning structured intents in **350ms to 600ms**.
+3. **Meko Memory TTL Cache (120s)**:
+   - Recalled customer preferences and past order facts are cached in memory. Follow-up inquiries within 2 minutes return recalled memories in **< 1ms**.
+4. **Non-Blocking Background Memory Writes**:
+   - Meko memory persistence (`memory_add`) is scheduled via `asyncio.create_task` in the background, preventing write latency from delaying customer WhatsApp replies.
+5. **Direct Twilio Binary Media Streaming**:
+   - Voice notes and images stream directly from Twilio's media servers into memory and pass to Gemini Multimodal models, avoiding disk I/O bottlenecks.
+
+---
+
+## 🧠 Phase 4: Meko Long-Term Memory Integration
+
+Munim AI integrates with **Meko Long-Term Memory** via MCP JSON-RPC over HTTP (`https://mcp.mekodata.ai/mcp`) across 4 isolated datapacks:
+
+| Datapack | Purpose | Usage in Agents |
+|---|---|---|
+| `munim-customer` | Customer preferences, favorite sizes, past inquiries | Used by `CustomerAgent` for inquiries (*"Same wali kurti available hai?"*) |
+| `munim-orders` | Order history, reorder patterns, stock tracking | Used by `OrderAgent` for repeat purchase re-booking (*"Pehle jo order kara tha wahi wapas karna hai"*) |
+| `munim-finance` | Payment history, UTR references, dues patterns | Used by `FinanceAgent` for ledger reconciliation |
+| `munim-build` | Design contracts, schema obligations, API specifications | Isolated build-time architectural memory (never mixed with product data) |
+
+### Meko ON vs. OFF Demonstration (Criterion A1)
+- **Meko OFF**: Customer asks *"Same wali kurti available hai?"* → Munim AI has no context and responds generically: *"Aap kaunsi kurti ki baat kar rahe hain? Kripya naam aur size batayein."*
+- **Meko ON**: Customer asks *"Same wali kurti available hai?"* → Meko recalls *"Customer 918587859710 previously ordered Cotton Anarkali Kurti in size XXL and Red color"* → Munim AI responds: *"Haanji! Aapki previous favorite Cotton Anarkali Kurti (XXL, Red) hamare paas stock mein available hai! Price ₹1299 hai. Kya main aapka order book kar doon?"*
+
+---
+
+## 📦 Phase 5: Async Message Queue & Background Worker
+
+To handle heavy background jobs, scheduled digests, and outbound notifications, Munim AI implements a decoupled **Durable SQLite Queue & Async Worker Engine**:
+
+- **Durable Queue (`backend/app/queue/`)**:
+  - Backed by SQLite table `queue_jobs` with atomic state transitions (`pending` → `processing` → `completed` / `retrying` / `failed`).
+  - Supports automatic retries with exponential backoff and error tracking.
+- **Worker Service (`backend/app/workers/queue_worker.py`)**:
+  - Runs as an asynchronous background loop started automatically via FastAPI lifespan.
+  - Job Types supported:
+    - `OUTBOUND_WHATSAPP`: Outbound customer & seller messaging via Twilio REST API.
+    - `PAYMENT_APPROVED_ALERT`: Triggered when seller approves payment on the dashboard.
+    - `DAILY_DUES_DIGEST`: Computes hisaab report and dispatches morning digest to owner.
+    - `INCOMING_HEAVY_MESSAGE`: Processes long multimodal audio or image analysis asynchronously.
+- **REST Monitoring API (`backend/app/api/routes/queue.py`)**:
+  - `GET /queue/status`: Real-time pending, processing, completed, failed counts.
+  - `GET /queue/jobs`: Recent job history.
+  - `POST /queue/retry-failed`: 1-click retry for all failed tasks.
 
 ---
 
@@ -258,7 +298,17 @@ python scripts/test_multimodal_extraction.py
 # 2. Test Phase 3 Orchestrator & Three Specialized Agents
 python scripts/test_phase3_agents.py
 
-# 3. Test Supabase Database & Auth Connectivity
+# 3. Test Phase 4 Meko Long-Term Memory (4 Datapacks & Meko ON vs OFF Demo)
+python scripts/test_meko_memory.py
+
+# 4. Test Phase 4 Repeat Order Auto-Booking with Meko Memory
+python scripts/test_repeat_order_flow.py
+
+# 5. Test Phase 5 Async Message Queue & Background Worker
+python scripts/test_phase5_worker.py
+python -m pytest tests/test_phase5_queue.py -v
+
+# 6. Test Supabase Database & Auth Connectivity
 python -m scripts.test_supabase_connection
 ```
 
