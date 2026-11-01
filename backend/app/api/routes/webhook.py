@@ -265,7 +265,33 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     }
     execution_result = await orchestrator.route_and_execute(extracted, context)
 
-    # 8. Return Instant TwiML XML Response to Customer
+    # 8. Async Queue Integration (Phase 5): Enqueue Outbound Owner Alerts
+    if execution_result.get("escalate") or execution_result.get("action") == "payment_claim_created":
+        try:
+            from backend.app.queue import get_durable_queue, JobType
+            q = get_durable_queue()
+            owner_phone = settings.OWNER_WHATSAPP_NUMBER.replace("+", "").strip()
+            action = execution_result.get("action", "")
+            if action == "payment_claim_created":
+                alert_msg = (
+                    f"💳 *Munim Payment Alert*: New UPI claim received from {sender_phone} ({contact_name or 'Buyer'}).\n"
+                    f"Verify settlement on your Munim dashboard."
+                )
+            else:
+                alert_msg = (
+                    f"🚨 *Munim Alert*: Escalation from {sender_phone} ({contact_name or 'Customer'}).\n"
+                    f"Reason: {execution_result.get('escalation_reason') or 'Review required'}"
+                )
+            q.enqueue(JobType.OUTBOUND_WHATSAPP, {
+                "to_phone": owner_phone,
+                "text": alert_msg,
+                "sender_phone": sender_phone
+            })
+            logger.info(f"Enqueued owner notification via Phase 5 DurableQueue for {sender_phone}")
+        except Exception as q_err:
+            logger.warning(f"Failed to enqueue notification to Phase 5 queue: {q_err}")
+
+    # 9. Return Instant TwiML XML Response to Customer
     reply_text = execution_result.get("reply", "")
     if reply_text:
         logger.info(f"Delivering reply via {execution_result.get('agent_used')}: {reply_text[:60]}...")

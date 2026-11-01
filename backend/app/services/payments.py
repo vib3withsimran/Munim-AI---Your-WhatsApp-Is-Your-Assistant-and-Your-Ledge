@@ -102,3 +102,48 @@ async def get_customer_dues(seller_id: str, customer_id: str) -> Dict[str, Any]:
             "total_paid": 0.0,
             "outstanding_dues": 0.0
         }
+
+
+async def approve_payment_claim(seller_id: str, payment_id: str) -> Dict[str, Any]:
+    """
+    Approves a pending payment claim:
+    1. Updates payment status to 'verified' in Supabase.
+    2. Updates linked order status to 'completed' or 'paid'.
+    3. Returns customer details for sending outbound notification.
+    """
+    supabase = get_supabase_client()
+    # Fetch payment
+    p_res = supabase.table("payments").select("*").eq("id", payment_id).eq("seller_id", seller_id).execute()
+    payments = p_res.data or []
+    if not payments:
+        raise ValueError(f"Payment claim {payment_id} not found.")
+
+    payment = payments[0]
+    supabase.table("payments").update({"status": "verified"}).eq("id", payment_id).execute()
+
+    order_id = payment.get("order_id")
+    customer_phone = None
+    if order_id:
+        supabase.table("orders").update({"status": "completed"}).eq("id", order_id).execute()
+        o_res = supabase.table("orders").select("customer_id").eq("id", order_id).execute()
+        if o_res.data:
+            cust_id = o_res.data[0].get("customer_id")
+            if cust_id:
+                c_res = supabase.table("customers").select("phone").eq("id", cust_id).execute()
+                if c_res.data:
+                    customer_phone = c_res.data[0].get("phone")
+
+    return {
+        "success": True,
+        "payment_id": payment_id,
+        "amount": payment.get("amount", 0.0),
+        "order_id": order_id,
+        "customer_phone": customer_phone
+    }
+
+
+async def reject_payment_claim(seller_id: str, payment_id: str, reason: str = "Payment verification failed") -> Dict[str, Any]:
+    """Rejects an unverified payment claim."""
+    supabase = get_supabase_client()
+    supabase.table("payments").update({"status": "rejected"}).eq("id", payment_id).eq("seller_id", seller_id).execute()
+    return {"success": True, "payment_id": payment_id, "status": "rejected", "reason": reason}
