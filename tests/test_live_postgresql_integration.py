@@ -190,11 +190,12 @@ class TestLiveSupabasePostgreSQLIntegration:
 
         # 1. Seller A customer, product, variant, inventory
         cust_a_id = str(uuid.uuid4())
+        phone_a = f"+9199{uuid.uuid4().int % 100000000:08d}"
         client_a.table("customers").insert({
             "id": cust_a_id,
             "seller_id": seller_a,
             "name": "Live Test Cust A",
-            "phone": "+919999900001",
+            "phone": phone_a,
         }).execute()
         created["customers"].append((client_a, cust_a_id))
 
@@ -231,11 +232,12 @@ class TestLiveSupabasePostgreSQLIntegration:
 
         # 2. Seller B customer, product, variant, inventory
         cust_b_id = str(uuid.uuid4())
+        phone_b = f"+9188{uuid.uuid4().int % 100000000:08d}"
         client_b.table("customers").insert({
             "id": cust_b_id,
             "seller_id": seller_b,
             "name": "Live Test Cust B",
-            "phone": "+919999900002",
+            "phone": phone_b,
         }).execute()
         created["customers"].append((client_b, cust_b_id))
 
@@ -287,7 +289,16 @@ class TestLiveSupabasePostgreSQLIntegration:
             yield payload
         finally:
             # Safe cleanup in reverse dependency order
-            # Delete any created orders for Seller A and B
+            # Delete any created orders for Seller A and B (by customer ID or recorded order ID)
+            for client, cid in created["customers"]:
+                try:
+                    orders_res = client.table("orders").select("id").eq("customer_id", cid).execute()
+                    for o in (orders_res.data or []):
+                        client.table("order_items").delete().eq("order_id", o["id"]).execute()
+                        client.table("orders").delete().eq("id", o["id"]).execute()
+                except Exception:
+                    pass
+
             for client, oid in created["orders"]:
                 try:
                     client.table("order_items").delete().eq("order_id", oid).execute()
@@ -698,9 +709,9 @@ class TestLiveSupabasePostgreSQLIntegration:
         order = service_a.create_order_with_reservation(seller_id=seller_a, data=req)
         rec["created"]["orders"].append((client_a, str(order.id)))
 
-        # Fulfill order
-        fulfilled = service_a.fulfill_order(seller_id=seller_a, order_id=order.id, target_status="completed")
-        assert fulfilled.status == "completed"
+        # Fulfill order with valid status 'delivered' (compliant with orders_status_check)
+        fulfilled = service_a.fulfill_order(seller_id=seller_a, order_id=order.id, target_status="delivered")
+        assert fulfilled.status == "delivered"
 
         # Check live inventory: physical stock was 10 -> now 8. reserved was 2 -> now 0.
         inv_res = client_a.table("inventory").select("*").eq("id", rec["inv_a_id"]).single().execute()
@@ -709,7 +720,7 @@ class TestLiveSupabasePostgreSQLIntegration:
 
         # Duplicate fulfillment rejected
         with pytest.raises(InvalidOrderTransitionError) as exc_info:
-            service_a.fulfill_order(seller_id=seller_a, order_id=order.id)
+            service_a.fulfill_order(seller_id=seller_a, order_id=order.id, target_status="delivered")
         assert "already fulfilled" in str(exc_info.value).lower()
 
     def test_live_cancellation_and_duplicate_cancellation_prevention(self, live_disposable_records):

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
@@ -48,6 +49,16 @@ class OrderItemResponse(BaseModel):
     line_total: Decimal = Field(description="Calculated line total")
     product_name_snapshot: Optional[str] = Field(default=None, description="Snapshot product title")
     variant_snapshot: Optional[Dict[str, Any]] = Field(default=None, description="Snapshot variant details as JSONB")
+
+    @field_validator("variant_snapshot", mode="before")
+    @classmethod
+    def parse_variant_snapshot(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return v
+        return v
 
 
 class OrderCreateRequest(BaseModel):

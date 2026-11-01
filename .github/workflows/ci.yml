@@ -43,4 +43,35 @@ jobs:
           WHATSAPP_VERIFY_TOKEN: "munim_verify_2026"
         run: |
           python -c "from backend.app.main import app; print('Munim AI initialized cleanly in CI!')"
+    frontend-ci:
+    name: Frontend Build & Typecheck
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.32.1   # Aligned with frontend/package.json (supports Node 20 & Node 22)
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22" # Node 22 Active LTS
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          pnpm install
+
+      - name: Build Next.js production bundle
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "mock_key_for_ci_pipeline"
+        run: |
+          cd frontend
+          pnpm run build

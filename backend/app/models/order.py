@@ -1,8 +1,9 @@
+import json
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class OrderItem(BaseModel):
@@ -19,6 +20,16 @@ class OrderItem(BaseModel):
     line_total: Decimal = Field(description="Line total (quantity * unit_price)", ge=Decimal("0.00"))
     product_name_snapshot: Optional[str] = Field(default=None, description="Snapshot product title at order time")
     variant_snapshot: Optional[Dict[str, Any]] = Field(default=None, description="Snapshot variant details (size, color, SKU) as JSONB")
+
+    @field_validator("variant_snapshot", mode="before")
+    @classmethod
+    def parse_variant_snapshot(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return v
+        return v
 
 
 class Order(BaseModel):
