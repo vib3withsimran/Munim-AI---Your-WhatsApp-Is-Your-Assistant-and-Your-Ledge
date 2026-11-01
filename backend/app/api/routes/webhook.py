@@ -20,7 +20,8 @@ GREETING_TOKENS = {
     "namaste", "namasteji", "namaskar", "pranam",
     "kaise", "kya", "haal", "chal", "theek", "ho",
     "good", "morning", "afternoon", "evening",
-    "bhaiya", "bhai", "sir", "mam", "ji", "aap", "dost"
+    "bhaiya", "bhai", "sir", "mam", "ji", "aap", "dost",
+    "munim", "ai", "bot", "assistant"
 }
 
 TRANSACTIONAL_KEYWORDS = {
@@ -52,7 +53,7 @@ def is_conversational_greeting(raw_text: str) -> bool:
 
     # If short conversational message containing greeting tokens, it's a greeting
     greeting_count = sum(1 for w in words if w in GREETING_TOKENS)
-    if len(words) <= 6 and greeting_count >= 1:
+    if len(words) <= 10 and greeting_count >= 1:
         return True
 
     return False
@@ -180,16 +181,17 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     )
 
     logger.info(f"Processing Twilio message from {sender_phone} ({contact_name}): '{raw_text}' [type={msg_type}]")
+    clean_text = raw_text.lower().strip()
 
     # 3. Privacy Filter Check (#private / #resume)
     is_private, _ = check_privacy(sender_phone, raw_text)
     if is_private:
         logger.info(f"Privacy active for {sender_phone}. Bypassing AI & storage.")
-        if raw_text.strip().lower().startswith("#private"):
+        if clean_text.startswith("#private"):
             return build_twiml_response("🔒 Munim AI assistant paused for this chat. Type #resume to restart.")
         return Response(content="OK", status_code=status.HTTP_200_OK)
 
-    if raw_text.strip().lower().startswith("#resume"):
+    if clean_text.startswith("#resume"):
         return build_twiml_response("🔓 Munim AI assistant resumed for this chat.")
 
     # 4. Instant Fast-Path for Conversational Greetings (< 10ms turnaround)
