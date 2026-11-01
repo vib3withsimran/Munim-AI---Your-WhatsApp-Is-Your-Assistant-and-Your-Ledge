@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+<<<<<<< Updated upstream
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -46,6 +47,29 @@ export default function MobileDashboardPage() {
       </div>
     );
   }
+=======
+import { useAuth } from "@/context/AuthContext";
+import SplineChart from "@/components/SplineChart";
+
+const MOBILE_MONTH_DATA = [
+  { label: "W1", value: 42000 },
+  { label: "W2", value: 55000 },
+  { label: "W3", value: 68000 },
+  { label: "W4", value: 76000 },
+  { label: "Oct 30", value: 86420 },
+];
+
+const TODAY_TIMELINE = [
+  { icon: "✓", bg: "bg-[#22c55e]/20 text-[#4efa72] border-[#22c55e]/30", text: "5 Orders complete ho gaye" },
+  { icon: "📦", bg: "bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30", text: "3 naye Orders aaye hain" },
+  { icon: "₹", bg: "bg-[#3b82f6]/20 text-[#60a5fa] border-[#3b82f6]/30", text: "2 Payments mile hain" },
+  { icon: "🔔", bg: "bg-[#ef4444]/20 text-[#f87171] border-[#ef4444]/30", text: "2 Customers ke paise abhi baki hain" },
+];
+
+export default function MobileDashboardPage() {
+  const { businessName, sellerInitial } = useAuth();
+  const [activeTab, setActiveTab] = useState("Home");
+>>>>>>> Stashed changes
 
   return (
     <div className="min-h-screen bg-[#07110D] text-[#F0FDF4] flex justify-center py-0 sm:py-6">
@@ -82,13 +106,21 @@ export default function MobileDashboardPage() {
               <Bell className="w-4 h-4" />
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#EF4444]" />
             </button>
+<<<<<<< Updated upstream
             <div className="w-8 h-8 rounded-full bg-[#B6F23C] text-[#07110D] font-black text-xs flex items-center justify-center shadow-[0_0_8px_rgba(182,242,60,0.35)]">
               {sellerInitial || "NC"}
+=======
+
+            {/* Avatar */}
+            <div className="w-8 h-8 rounded-full bg-[#161e19] border border-[rgba(78,250,114,0.25)] flex items-center justify-center text-xs font-bold text-[#4efa72]">
+              {sellerInitial}
+>>>>>>> Stashed changes
             </div>
           </div>
         </div>
 
         {/* Greeting Banner */}
+<<<<<<< Updated upstream
         <div className="px-5 pt-2 pb-3">
           <h1 className="text-xl font-black text-[#F0FDF4] flex items-center gap-1.5">
             Good afternoon, {businessName || "Neha"} 👋
@@ -112,6 +144,14 @@ export default function MobileDashboardPage() {
               </div>
             </div>
             <ChevronDown className="w-3 h-3 text-[#BAC8C1]/60 flex-shrink-0 ml-1" />
+=======
+        <div className="px-5 pt-3 pb-2 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-[#f0fdf4] flex items-center gap-1.5">
+              Namaste {businessName}! 👋
+            </h1>
+            <p className="text-xs text-[#9db8a0] mt-0.5">Aaj ka business yahan dekhiye.</p>
+>>>>>>> Stashed changes
           </div>
 
           {/* Pill 2: WhatsApp Connected */}

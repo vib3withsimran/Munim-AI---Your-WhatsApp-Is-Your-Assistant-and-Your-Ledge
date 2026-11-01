@@ -55,7 +55,11 @@ export default function LandingNav() {
         <div className="hidden md:flex items-center gap-3.5">
           <Link
             href="/login"
+<<<<<<< Updated upstream
             className="text-xs sm:text-sm font-semibold text-[#BAC8C1] hover:text-[#F0FDF4] px-3 py-1.5 transition-colors"
+=======
+            className="text-xs sm:text-sm font-semibold text-[#BAC8C1] hover:text-[#F5F7F4] transition-colors"
+>>>>>>> Stashed changes
           >
             Login
           </Link>
