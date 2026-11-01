@@ -14,6 +14,8 @@ from backend.app.repositories.inventory_repository import InventoryRepository
 from backend.app.repositories.order_repository import OrderRepository
 from backend.app.repositories.payment_repository import PaymentRepository
 from backend.app.repositories.media_repository import MediaRepository
+from backend.app.repositories.webhook_repository import WebhookRepository
+from backend.app.repositories.privacy_repository import PrivacyRepository
 
 __all__ = [
     # Exceptions
@@ -32,5 +34,7 @@ __all__ = [
     "OrderRepository",
     "PaymentRepository",
     "MediaRepository",
+    "WebhookRepository",
+    "PrivacyRepository",
 ]
 

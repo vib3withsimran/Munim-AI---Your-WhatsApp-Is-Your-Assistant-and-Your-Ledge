@@ -15,6 +15,7 @@ from backend.app.services.sheets import (
     get_store_summary
 )
 from backend.app.utils.privacy import check_privacy
+from backend.app.services.webhook_orchestration_service import WebhookOrchestrationService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,6 +44,7 @@ def build_twiml_response(reply_text: str) -> Response:
 
 
 @router.get("/webhook")
+@router.get("/api/webhook")
 async def verify_webhook(
     hub_mode: str = Query(None, alias="hub.mode"),
     hub_challenge: str = Query(None, alias="hub.challenge"),
@@ -96,12 +98,56 @@ async def fetch_twilio_media(media_url: str) -> Optional[bytes]:
 
 
 @router.post("/webhook")
+@router.post("/api/webhook")
 async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     """
-    Handles incoming WhatsApp messages from Twilio with sub-1s fast path,
-    multimodal processing (images & audio), and Phase 3 multi-agent routing.
+    Handles incoming WhatsApp messages from Twilio.
+    When WHATSAPP_PIPELINE_MODE == 'supabase', delegates to WebhookOrchestrationService (Phase 3H).
+    Otherwise falls back to the legacy Google Sheets / SQLite pipeline.
     """
     content_type = request.headers.get("content-type", "")
+
+    # Phase 3H: Supabase Multi-tenant Pipeline
+    if getattr(settings, "WHATSAPP_PIPELINE_MODE", "supabase") == "supabase":
+        signature = request.headers.get("X-Twilio-Signature") or request.headers.get("x-twilio-signature")
+        url = str(request.url)
+        params_dict: dict = {}
+
+        if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+            form_data = await request.form()
+            params_dict = {k: str(v) for k, v in form_data.items()}
+        else:
+            try:
+                data = await request.json()
+                if isinstance(data, dict):
+                    if "MessageSid" in data or "From" in data:
+                        params_dict = {str(k): str(v) for k, v in data.items()}
+                    elif "entry" in data:
+                        for entry in data.get("entry", []):
+                            for change in entry.get("changes", []):
+                                val = change.get("value", {})
+                                msgs = val.get("messages", [])
+                                contacts = val.get("contacts", [])
+                                if msgs:
+                                    m = msgs[0]
+                                    params_dict["MessageSid"] = m.get("id", "")
+                                    params_dict["From"] = m.get("from", "")
+                                    params_dict["To"] = val.get("metadata", {}).get("display_phone_number", "")
+                                    params_dict["Body"] = m.get("text", {}).get("body", "")
+                                    if contacts:
+                                        params_dict["ProfileName"] = contacts[0].get("profile", {}).get("name", "")
+            except Exception as e:
+                logger.error(f"Error parsing incoming JSON payload: {e}")
+                return Response(content="Invalid payload", status_code=status.HTTP_400_BAD_REQUEST)
+
+        service = WebhookOrchestrationService()
+        return await service.process_incoming_webhook(
+            request_url=url,
+            form_data=params_dict,
+            signature=signature,
+        )
+
+    # Legacy Pipeline (Sheets & SQLite)
 
     message_id = ""
     sender_phone = ""

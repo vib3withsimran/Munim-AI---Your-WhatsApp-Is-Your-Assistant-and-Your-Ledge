@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = Field(default="")
     TWILIO_AUTH_TOKEN: str = Field(default="")
     TWILIO_WHATSAPP_NUMBER: str = Field(default="whatsapp:+14155238886")
+    TWILIO_VALIDATE_SIGNATURE: bool = Field(default=True)
+    WHATSAPP_PIPELINE_MODE: str = Field(default="supabase")
 
     # Meta WhatsApp Cloud API (kept for backward compatibility)
     WHATSAPP_PHONE_NUMBER_ID: str = Field(default="")
@@ -44,6 +46,13 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = Field(default="")
     SUPABASE_PUBLISHABLE_KEY: str = Field(default="")
     SUPABASE_STORAGE_BUCKET: str = Field(default="munim-media")
+
+    # Meko Long-Term Memory
+    MEKO_API_KEY: str = Field(default="")
+    MEKO_DATAPACK_BUILD: str = Field(default="")
+    MEKO_DATAPACK_CUSTOMER: str = Field(default="")
+    MEKO_DATAPACK_ORDERS: str = Field(default="")
+    MEKO_DATAPACK_FINANCE: str = Field(default="")
 
     # Meko Long-Term Memory
     MEKO_API_KEY: str = Field(default="")

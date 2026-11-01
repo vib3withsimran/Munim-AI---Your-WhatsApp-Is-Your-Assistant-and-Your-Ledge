@@ -12,6 +12,7 @@ from backend.app.services.inventory_service import InventoryService
 from backend.app.services.order_service import OrderService
 from backend.app.services.payment_service import PaymentService
 from backend.app.services.storage_service import StorageService
+from backend.app.services.webhook_orchestration_service import WebhookOrchestrationService
 
 __all__ = [
     # Exceptions
@@ -28,4 +29,5 @@ __all__ = [
     "OrderService",
     "PaymentService",
     "StorageService",
+    "WebhookOrchestrationService",
 ]

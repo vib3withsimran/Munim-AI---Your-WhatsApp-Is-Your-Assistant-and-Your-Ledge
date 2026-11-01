@@ -55,71 +55,60 @@ def get_live_seller_tokens() -> Tuple[Optional[str], Optional[str], Optional[str
         return None, None, None, None, f"Supabase auth failed: {e}"
 
 
-def classify_probe_error(exc: Exception) -> bool:
+def classify_probe_error(e: Exception) -> bool:
     """
-    Classifies a probe exception.
-    Returns False ONLY if the exception is PostgreSQL error 23502 on payments.order_id
-    (indicating that the NOT NULL constraint remains active).
-    Prints PostgreSQL error code, message and details.
-    Raises RuntimeError for all other unexpected database errors.
+    Classifies a probe failure.
+    Returns False ONLY if the failure is PostgreSQL error 23502 specifically on payments.order_id
+    (meaning the not-null constraint is still enforced).
+    Raises RuntimeError for all other errors (missing columns, RLS violations, connection issues, etc.).
     """
-    code = getattr(exc, "code", None)
-    message = getattr(exc, "message", None)
-    details = getattr(exc, "details", None)
-    hint = getattr(exc, "hint", None)
+    err_str = str(e)
+    code = getattr(e, "code", None)
+    message = getattr(e, "message", "") or ""
+    details = getattr(e, "details", "") or ""
 
-    if code is None and hasattr(exc, "args") and exc.args and isinstance(exc.args[0], dict):
-        d = exc.args[0]
-        code = d.get("code")
-        message = d.get("message")
-        details = d.get("details")
-        hint = d.get("hint")
+    if isinstance(e, dict):
+        code = e.get("code")
+        message = e.get("message", "")
+        details = e.get("details", "")
 
-    raw_str = str(exc)
-    print(
-        f"\n[check_is_order_id_nullable_live] Probe insert error: "
-        f"code={code}, message={message}, details={details}, hint={hint}"
-    )
+    # Check if PostgREST APIError has error dict
+    if hasattr(e, "args") and e.args and isinstance(e.args[0], dict):
+        d = e.args[0]
+        code = code or d.get("code")
+        message = message or d.get("message", "")
+        details = details or d.get("details", "")
 
-    is_23502 = (str(code) == "23502") or ("23502" in raw_str)
-    is_order_id_null = ("order_id" in raw_str.lower()) and (
-        "not-null" in raw_str.lower() or "null value" in raw_str.lower()
-    )
+    is_23502 = (code == "23502") or ("23502" in err_str)
+    on_order_id = ("order_id" in message) or ("order_id" in details) or ("order_id" in err_str)
 
-    if is_23502 and is_order_id_null:
+    if is_23502 and on_order_id:
         return False
 
-    raise RuntimeError(
-        f"Unexpected database error during unlinked payment probe: code={code}, message={message}, details={details}, hint={hint}"
-    ) from exc
+    raise RuntimeError(f"Unexpected database error during unlinked payment probe: {e}")
 
 
-def check_is_order_id_nullable_live(token: str, seller_id: str) -> bool:
+def check_is_order_id_nullable_live(token: str, seller_id: Optional[str] = None) -> bool:
     """
     Checks whether migration 20261101_003_unlinked_payments.sql has been deployed
-    by attempting to insert a temporary valid unlinked payment.
-    - Minimal valid payload using only columns confirmed to exist in payments table.
-    - Explicitly sets seller_id to authenticated Seller A.
-    - Explicitly sets order_id to None.
-    - Authenticates PostgREST client with Seller A JWT.
-    - Safely deletes probe record on success using same seller client.
-    - Prints error details and classifies only 23502 on order_id as NOT NULL constraint.
+    by attempting to insert a temporary dummy unlinked payment.
     """
     sb = create_client(settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY)
     sb.postgrest.auth(token)
     test_ref = f"PROBE-{uuid.uuid4().hex[:8]}"
 
-    probe_payload = {
-        "seller_id": seller_id,
+    payload = {
         "amount": 1.00,
         "method": "cash",
         "status": "pending",
         "order_id": None,
-        "transaction_reference": test_ref,
+        "transaction_reference": test_ref
     }
+    if seller_id:
+        payload["seller_id"] = seller_id
 
     try:
-        res = sb.table("payments").insert(probe_payload).execute()
+        res = sb.table("payments").insert(payload).execute()
         if res.data:
             probe_id = res.data[0]["id"]
             sb.table("payments").delete().eq("id", probe_id).execute()
@@ -177,8 +166,10 @@ class TestLiveUnlinkedPayments:
             txn_ref = f"UPI-UNLINKED-{random_suffix}"
             unlinked_payload = {
                 "amount": 1500.00,
+                "currency": "INR",
                 "method": "upi",
                 "transaction_reference": txn_ref,
+                "notes": "Customer transferred 1500 before order creation",
                 "order_id": None
             }
             res_pay = client.post("/api/payments", json=unlinked_payload, headers=self.headers_a)
@@ -247,7 +238,7 @@ class TestLiveUnlinkedPayments:
             order_data = ord_res.json()
             order_id = order_data["id"]
             assert Decimal(str(order_data["total_amount"])) == Decimal("1500.00")
-            assert order_data["status"] == "pending"
+            assert order_data["payment_status"] == "unpaid"
 
             # 5. Cross-seller linking rejection: Seller B cannot link payment to Seller A's order
             b_link_res = client.post(
@@ -272,26 +263,23 @@ class TestLiveUnlinkedPayments:
             list_after_link = client.get("/api/payments?unlinked_only=true", headers=self.headers_a)
             assert payment_id not in [p["id"] for p in list_after_link.json()]
 
-            # 7. Verification gating: Pending payment on order
-            check_pays = client.get(f"/api/payments?order_id={order_id}", headers=self.headers_a)
-            assert check_pays.status_code == 200
-            pays_data = check_pays.json()
-            assert len(pays_data) == 1
-            assert pays_data[0]["status"] == "pending"
+            # 7. Verification gating: Pending payment does NOT mark order as paid
+            check_ord = client.get(f"/api/orders/{order_id}", headers=self.headers_a)
+            assert check_ord.json()["payment_status"] == "unpaid"
 
             # Merchant verifies payment
             ver_res = client.post(f"/api/payments/{payment_id}/verify", headers=self.headers_a)
             assert ver_res.status_code == 200
             assert ver_res.json()["status"] == "verified"
 
-            # Order payment must now be verified
-            check_verified = client.get(f"/api/payments?order_id={order_id}", headers=self.headers_a)
-            assert check_verified.status_code == 200
-            assert check_verified.json()[0]["status"] == "verified"
+            # Order payment status must now be 'paid'
+            paid_ord = client.get(f"/api/orders/{order_id}", headers=self.headers_a)
+            assert paid_ord.json()["payment_status"] == "paid"
 
             # 8. Uniqueness of transaction_reference per seller
             dup_pay_payload = {
                 "amount": 100.00,
+                "currency": "INR",
                 "method": "upi",
                 "transaction_reference": txn_ref,
                 "order_id": None

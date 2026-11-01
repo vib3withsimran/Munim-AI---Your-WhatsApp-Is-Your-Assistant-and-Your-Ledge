@@ -37,6 +37,13 @@ from backend.app.schemas.media import (
     MediaResponse,
     MediaUrlResponse,
 )
+from backend.app.schemas.webhook import (
+    normalize_whatsapp_phone,
+    ChannelCreateRequest,
+    ChannelResponse,
+    WebhookMessageResponse,
+    IncomingTwilioPayload,
+)
 
 __all__ = [
     # Customer
@@ -72,5 +79,11 @@ __all__ = [
     # Media
     "MediaResponse",
     "MediaUrlResponse",
+    # Webhook
+    "normalize_whatsapp_phone",
+    "ChannelCreateRequest",
+    "ChannelResponse",
+    "WebhookMessageResponse",
+    "IncomingTwilioPayload",
 ]
 
