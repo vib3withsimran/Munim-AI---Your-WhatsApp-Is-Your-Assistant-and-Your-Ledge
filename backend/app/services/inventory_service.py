@@ -115,6 +115,15 @@ class InventoryService:
                 f"Reserved quantity ({new_res}) cannot exceed available physical stock ({new_avail})."
             )
 
+        if not current:
+            return self.inventory_repo.create_inventory(
+                seller_id=sid,
+                variant_id=vid,
+                available_quantity=new_avail,
+                reserved_quantity=new_res,
+                low_stock_threshold=data.low_stock_threshold if data.low_stock_threshold is not None else 5,
+            )
+
         updated = self.inventory_repo.update_inventory(seller_id=sid, variant_id=vid, data=data)
         if not updated:
             raise NotFoundError(f"Inventory record for variant '{vid}' could not be updated.")

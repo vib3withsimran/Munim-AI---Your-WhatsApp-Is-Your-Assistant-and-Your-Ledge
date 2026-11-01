@@ -55,6 +55,13 @@ class InMemoryQuery:
         self.rows = [r for r in self.rows if str(r.get(column)) in str_vals]
         return self
 
+    def is_(self, column: str, value: str):
+        if str(value).lower() in ("null", "none"):
+            self.rows = [r for r in self.rows if r.get(column) is None]
+        else:
+            self.rows = [r for r in self.rows if str(r.get(column)) == str(value)]
+        return self
+
     def order(self, column: str, desc: bool = False):
         return self
 
@@ -414,7 +421,7 @@ class TestOrderRepository:
 # ============================================================================
 
 class TestPaymentRepository:
-    def test_payment_creation_rejects_unlinked_payments(self):
+    def test_payment_creation_allows_unlinked_payments(self):
         client = InMemoryMockClient()
         repo = PaymentRepository(client)
         seller_id = uuid.uuid4()
@@ -424,9 +431,10 @@ class TestPaymentRepository:
             amount=Decimal("500.00"),
             method=PaymentMethod.UPI
         )
-        with pytest.raises(ConstraintViolationError) as exc_info:
-            repo.create_payment(seller_id=seller_id, data=req)
-        assert "live database schema requires 'order_id'" in str(exc_info.value)
+        pay = repo.create_payment(seller_id=seller_id, data=req)
+        assert pay.order_id is None
+        assert pay.amount == Decimal("500.00")
+        assert pay.seller_id == seller_id
 
     def test_payment_creation_rejects_cross_seller_order(self):
         seller_a = uuid.uuid4()

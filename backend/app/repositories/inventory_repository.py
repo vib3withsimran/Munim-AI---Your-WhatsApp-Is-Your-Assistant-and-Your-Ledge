@@ -85,6 +85,36 @@ class InventoryRepository:
         except Exception as e:
             raise map_supabase_error(e, entity="Inventory")
 
+    def create_inventory(
+        self,
+        seller_id: Union[str, UUID],
+        variant_id: Union[str, UUID],
+        available_quantity: int = 0,
+        reserved_quantity: int = 0,
+        low_stock_threshold: int = 5,
+    ) -> Inventory:
+        """Inserts an initial inventory record for a variant."""
+        sid = self._normalize_id(seller_id)
+        vid = self._normalize_id(variant_id)
+        payload = {
+            "seller_id": sid,
+            "variant_id": vid,
+            "available_quantity": available_quantity,
+            "reserved_quantity": reserved_quantity,
+            "low_stock_threshold": low_stock_threshold,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            res = (
+                self.db.table("inventory")
+                .insert(payload)
+                .execute()
+            )
+            row = res.data[0] if isinstance(res.data, list) else res.data
+            return Inventory.model_validate(row)
+        except Exception as e:
+            raise map_supabase_error(e, entity="Inventory")
+
     def update_inventory(
         self,
         seller_id: Union[str, UUID],

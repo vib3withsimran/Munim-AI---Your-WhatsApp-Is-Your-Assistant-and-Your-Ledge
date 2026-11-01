@@ -67,7 +67,7 @@ class ProductVariantCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    product_id: UUID = Field(description="UUID of the parent product")
+    product_id: Optional[UUID] = Field(default=None, description="UUID of the parent product")
     sku: Optional[str] = Field(default=None, max_length=100, description="Stock Keeping Unit / code")
     size: Optional[str] = Field(default=None, max_length=50, description="Size specification (e.g. S, M, L, XL)")
     color: Optional[str] = Field(default=None, max_length=50, description="Color specification (e.g. Blue, Maroon)")

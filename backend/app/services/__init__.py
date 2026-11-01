@@ -11,6 +11,7 @@ from backend.app.services.product_service import ProductService
 from backend.app.services.inventory_service import InventoryService
 from backend.app.services.order_service import OrderService
 from backend.app.services.payment_service import PaymentService
+from backend.app.services.storage_service import StorageService
 
 __all__ = [
     # Exceptions
@@ -26,4 +27,5 @@ __all__ = [
     "InventoryService",
     "OrderService",
     "PaymentService",
+    "StorageService",
 ]

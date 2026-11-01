@@ -30,7 +30,7 @@ class PaymentMethod(str, Enum):
 class PaymentCreateRequest(BaseModel):
     """
     Payload to record a payment.
-    Requires order_id while database constraint order_id NOT NULL is active.
+    Supports linked payments (with order_id) or unlinked payments (order_id=None).
     AI extraction confidence is never accepted as payment verification.
     """
 
@@ -38,7 +38,7 @@ class PaymentCreateRequest(BaseModel):
 
     order_id: Optional[UUID] = Field(
         default=None,
-        description="Associated order ID (required by live DB constraint until migration makes it nullable)"
+        description="Associated order ID (None for unlinked/advance payments)"
     )
     amount: Decimal = Field(
         ...,
@@ -77,6 +77,14 @@ class PaymentStatusUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: PaymentStatus = Field(description="Target payment status (e.g. verified, rejected)")
+
+
+class PaymentLinkRequest(BaseModel):
+    """Payload to link an unlinked payment to a specific order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: UUID = Field(description="Target order UUID to link this payment to")
 
 
 class PaymentResponse(BaseModel):

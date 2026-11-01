@@ -19,6 +19,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class AuthenticatedSeller:
     id: str
     db: Client
+    access_token: str = ""
 
 
 def get_current_seller(
@@ -48,7 +49,7 @@ def get_current_seller(
 
         seller_id = str(user_response.user.id)
 
-        # 3. Create a NEW database client for this request.
+        # 3. Create a NEW client for this request.
         # Never mutate a shared client's authorization token:
         # concurrent sellers must not share authentication state.
         seller_db = create_client(
@@ -56,12 +57,15 @@ def get_current_seller(
             settings.SUPABASE_PUBLISHABLE_KEY,
         )
 
-        # 4. Forward the verified seller's JWT to PostgREST.
+        # 4. Forward the verified seller's JWT to PostgREST and Storage.
         seller_db.postgrest.auth(access_token)
+        seller_db.options.headers["Authorization"] = f"Bearer {access_token}"
+        seller_db._storage = None
 
         return AuthenticatedSeller(
             id=seller_id,
             db=seller_db,
+            access_token=access_token,
         )
 
     except HTTPException:

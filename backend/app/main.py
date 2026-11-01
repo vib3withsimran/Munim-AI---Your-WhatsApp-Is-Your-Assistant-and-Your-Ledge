@@ -1,8 +1,20 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from backend.app.core.config import settings
-from backend.app.api.routes import webhook, auth, dashboard
+from backend.app.api.error_handlers import register_exception_handlers
+from backend.app.api.routes import (
+    webhook,
+    auth,
+    dashboard,
+    customers,
+    products,
+    inventory,
+    orders,
+    payments,
+    media,
+)
 
 # Setup logging
 logging.basicConfig(
@@ -16,6 +28,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Register domain and repository exception handlers
+register_exception_handlers(app)
+
 # Enable CORS restricted to configured origins (prevents wildcard + credentials security conflict)
 app.add_middleware(
     CORSMiddleware,
@@ -25,10 +40,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API routes
+# Include core and webhook routes
 app.include_router(webhook.router)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
+
+# Include Phase 3E resource routes
+app.include_router(customers.router)
+app.include_router(products.router)
+app.include_router(inventory.router)
+app.include_router(orders.router)
+app.include_router(payments.router)
+app.include_router(media.router)
+
+# Also expose dashboard under /api/dashboard for unified API gateway prefixing
+app.include_router(dashboard.router, prefix="/api")
 
 
 @app.get("/")

@@ -99,6 +99,21 @@ class OrderService:
         cid = self._normalize_id(customer_id)
         return self.order_repo.get_orders_by_customer(seller_id=sid, customer_id=cid, limit=limit, offset=offset)
 
+    def get_order_items(
+        self,
+        seller_id: Union[str, UUID],
+        order_id: Union[str, UUID]
+    ) -> List[OrderItem]:
+        """Retrieves all line items for an order owned by this seller."""
+        sid = self._normalize_id(seller_id)
+        oid = self._normalize_id(order_id)
+
+        order = self.get_order(seller_id=sid, order_id=oid)
+        if not order:
+            raise NotFoundError(f"Order '{oid}' not found or not owned by this seller.")
+
+        return self.order_repo.get_order_items(seller_id=sid, order_id=oid)
+
     # =========================================================================
     # Server-Authoritative Pricing & Snapshots
     # =========================================================================

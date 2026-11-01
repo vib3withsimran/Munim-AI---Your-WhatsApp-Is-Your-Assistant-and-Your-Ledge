@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # Supabase
     SUPABASE_URL: str = Field(default="")
     SUPABASE_PUBLISHABLE_KEY: str = Field(default="")
+    SUPABASE_STORAGE_BUCKET: str = Field(default="munim-media")
 
     @property
     def cors_origins_list(self) -> list[str]:

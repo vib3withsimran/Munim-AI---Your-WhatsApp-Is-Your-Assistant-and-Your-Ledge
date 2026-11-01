@@ -13,6 +13,7 @@ from backend.app.repositories.product_repository import ProductRepository
 from backend.app.repositories.inventory_repository import InventoryRepository
 from backend.app.repositories.order_repository import OrderRepository
 from backend.app.repositories.payment_repository import PaymentRepository
+from backend.app.repositories.media_repository import MediaRepository
 
 __all__ = [
     # Exceptions
@@ -30,5 +31,6 @@ __all__ = [
     "InventoryRepository",
     "OrderRepository",
     "PaymentRepository",
+    "MediaRepository",
 ]
 

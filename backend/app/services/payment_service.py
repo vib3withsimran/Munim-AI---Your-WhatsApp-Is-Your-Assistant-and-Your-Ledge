@@ -13,8 +13,9 @@ from backend.app.schemas.payment import (
 )
 from backend.app.repositories.payment_repository import PaymentRepository
 from backend.app.repositories.order_repository import OrderRepository
-from backend.app.repositories.exceptions import NotFoundError, ConstraintViolationError
+from backend.app.repositories.exceptions import NotFoundError, ConstraintViolationError, ForeignKeyViolationError
 from backend.app.services.exceptions import (
+    BusinessRuleError,
     InvalidPaymentTransitionError,
     AmbiguousPaymentMatchError,
 )
@@ -63,15 +64,17 @@ class PaymentService:
         seller_id: Union[str, UUID],
         status: Optional[str] = None,
         order_id: Optional[Union[str, UUID]] = None,
+        unlinked_only: bool = False,
         limit: int = 50,
         offset: int = 0
     ) -> List[Payment]:
-        """Lists payments owned by seller with optional status and order filters."""
+        """Lists payments owned by seller with optional status, order filters, and unlinked filter."""
         sid = self._normalize_id(seller_id)
         return self.payment_repo.list_payments(
             seller_id=sid,
             status=status,
             order_id=order_id,
+            unlinked_only=unlinked_only,
             limit=limit,
             offset=offset
         )
@@ -271,4 +274,64 @@ class PaymentService:
             if isinstance(e, (InvalidPaymentTransitionError, ConstraintViolationError)):
                 raise
             raise RuntimeError(f"Failed to update payment status: {e}")
+
+    def verify_payment(
+        self,
+        seller_id: Union[str, UUID],
+        payment_id: Union[str, UUID]
+    ) -> Payment:
+        """Verifies a pending payment as authenticated merchant."""
+        return self.update_payment_status(
+            seller_id=seller_id,
+            payment_id=payment_id,
+            new_status=PaymentStatus.VERIFIED,
+            is_owner_action=True,
+        )
+
+    def reject_payment(
+        self,
+        seller_id: Union[str, UUID],
+        payment_id: Union[str, UUID]
+    ) -> Payment:
+        """Rejects a payment as authenticated merchant."""
+        return self.update_payment_status(
+            seller_id=seller_id,
+            payment_id=payment_id,
+            new_status=PaymentStatus.REJECTED,
+            is_owner_action=True,
+        )
+
+    def link_payment_to_order(
+        self,
+        seller_id: Union[str, UUID],
+        payment_id: Union[str, UUID],
+        order_id: Union[str, UUID],
+        is_owner_action: bool = True
+    ) -> Payment:
+        """
+        Links an unlinked payment to an eligible order after merchant review.
+        - Rejects linking to cross-seller orders (NotFoundError).
+        - Rejects linking to non-existent orders.
+        - Rejects linking to cancelled orders.
+        - Rejects linking a payment that is already linked to another order.
+        """
+        sid = self._normalize_id(seller_id)
+        pid = self._normalize_id(payment_id)
+        oid = self._normalize_id(order_id)
+
+        payment = self.get_payment(seller_id=sid, payment_id=pid)
+        if not payment:
+            raise NotFoundError(f"Payment '{pid}' not found or not owned by this seller.")
+
+        if payment.order_id and str(payment.order_id) != oid:
+            raise BusinessRuleError(f"Payment '{pid}' is already linked to order '{payment.order_id}'.")
+
+        order = self.order_repo.get_order_by_id(seller_id=sid, order_id=oid)
+        if not order:
+            raise NotFoundError(f"Order '{oid}' not found or not owned by this seller.")
+
+        if str(order.status).lower() in ("cancelled", "canceled"):
+            raise BusinessRuleError(f"Cannot link payment to cancelled order '{oid}'.")
+
+        return self.payment_repo.link_payment_to_order(seller_id=sid, payment_id=pid, order_id=oid)
 

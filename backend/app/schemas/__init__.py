@@ -30,7 +30,12 @@ from backend.app.schemas.payment import (
     PaymentMethod,
     PaymentCreateRequest,
     PaymentStatusUpdateRequest,
+    PaymentLinkRequest,
     PaymentResponse,
+)
+from backend.app.schemas.media import (
+    MediaResponse,
+    MediaUrlResponse,
 )
 
 __all__ = [
@@ -62,6 +67,10 @@ __all__ = [
     "PaymentMethod",
     "PaymentCreateRequest",
     "PaymentStatusUpdateRequest",
+    "PaymentLinkRequest",
     "PaymentResponse",
+    # Media
+    "MediaResponse",
+    "MediaUrlResponse",
 ]
 

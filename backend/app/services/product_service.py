@@ -105,6 +105,8 @@ class ProductService:
         Rejects creation under archived products or foreign seller products.
         """
         sid = self._normalize_id(seller_id)
+        if not data.product_id:
+            raise ValueError("product_id is required to create a variant.")
         pid = self._normalize_id(data.product_id)
 
         parent = self.get_product(seller_id=sid, product_id=pid)
@@ -133,6 +135,21 @@ class ProductService:
         if not updated:
             raise NotFoundError(f"Variant '{vid}' update failed.")
         return updated
+
+    def list_variants(
+        self,
+        seller_id: Union[str, UUID],
+        product_id: Union[str, UUID]
+    ) -> List[ProductVariant]:
+        """Lists all variants for a parent product owned by the seller."""
+        sid = self._normalize_id(seller_id)
+        pid = self._normalize_id(product_id)
+
+        parent = self.get_product(seller_id=sid, product_id=pid)
+        if not parent:
+            raise NotFoundError(f"Product '{pid}' not found or not owned by this seller.")
+
+        return self.product_repo.list_variants_by_product(seller_id=sid, product_id=pid)
 
     def get_product_catalog(
         self,
