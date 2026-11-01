@@ -1,21 +1,19 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { env } from "@/lib/env";
 
-let client: ReturnType<typeof createBrowserClient> | null = null;
+let browserClient: ReturnType<typeof createBrowserClient> | null = null;
 
+/**
+ * Returns a singleton Supabase client for the browser.
+ * Ensures consistent session persistence and prevents redundant client creation.
+ */
 export function createClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    "https://yomqkdgofwsmzrpbxxag.supabase.co";
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    "sb_publishable_0GCSSdcJzjRl7mu8ZBq33g_nhq2Yncm";
-
   if (typeof window === "undefined") {
-    return createBrowserClient(url, key);
+    return createBrowserClient(env.supabaseUrl, env.supabaseAnonKey);
   }
 
-  if (!client) {
-    client = createBrowserClient(url, key, {
+  if (!browserClient) {
+    browserClient = createBrowserClient(env.supabaseUrl, env.supabaseAnonKey, {
       isSingleton: true,
       auth: {
         persistSession: true,
@@ -25,5 +23,5 @@ export function createClient() {
     });
   }
 
-  return client;
+  return browserClient;
 }
