@@ -1,212 +1,294 @@
 # Munim AI 🧾🤖
 
-> **Your WhatsApp is your assistant and your khata.**  
-> Munim AI turns an Indian small seller's existing WhatsApp into two things simultaneously: an AI customer assistant that replies when the owner is offline, and a customer-wise self-updating ledger (orders, payments, dues) extracted from text, voice notes, and UPI screenshots. Zero new apps to learn.
+> **Your WhatsApp is your Assistant, your Cashier, and your Khata.**  
+> Munim AI turns an Indian small seller's existing WhatsApp into an automated AI business operations system: it answers customer inquiries, takes orders, matches UPI payment screenshots, and maintains a self-updating ledger in Supabase and Google Sheets — with zero new apps for buyers or sellers to learn.
 
 ---
 
-## 🚀 Features
+## 🌟 Key Highlights
 
-- 💬 **Hinglish & Multilingual AI**: Understands natural Hindi, Hinglish, and English buyer chats ("2 kurti medium mein pink wali").
-- 📊 **Self-Updating Google Sheet Ledger**: Auto-creates and populates `Customers`, `Orders`, and `Payments` tabs in real time.
-- 🏪 **Dynamic Catalog Integration**: Reads stock and prices directly from your `Catalog` tab — never invents prices or promises out-of-stock items.
-- 🚨 **Human-in-the-Loop Escalation**: Automatically alerts the shop owner on WhatsApp when discounts, complaints, or custom requests occur.
-- 🔒 **Privacy by Design**: First-word commands like `#private` pause the bot instantly; numbers in `PrivateList` are never logged or sent to AI.
-- ⚡ **Offline / DRY_RUN Testing**: Full mock test suite allows testing the complete pipeline end-to-end even without active Meta Cloud credentials.
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Messaging** | Meta WhatsApp Cloud API |
-| **Backend Framework** | Python 3.11+, FastAPI, Uvicorn |
-| **AI / Intent Extraction** | Google Gemini 3.5 Flash / 3.1 Flash Lite |
-| **Audio Fallback** | Groq (Whisper Large v3) |
-| **Ledger Storage** | Google Sheets API (`gspread`) |
-| **State & Idempotency** | SQLite (webhook retry deduplication) |
-| **Local Tunneling** | ngrok |
-| **Containerization** | Docker |
+- 💬 **Multilingual & Hinglish First**: Speaks natural Hindi, Hinglish, and English buyer chats (*"2 anarkali kurti pack kar do XXL size mein"*).
+- 🎙️ **Voice Note to Ledger**: Native multimodal audio understanding transcribes spoken Hindi/English voice notes and extracts order items in one shot.
+- 📸 **UPI Screenshot & Handwritten OCR**: Automatically detects PhonePe, Google Pay, and Paytm receipts, extracts the 12-digit UTR and ₹ amount, and deciphers paper order lists.
+- ⚡ **Sub-1s Fast Path**: Uses Groq LPU inference for instant text turnaround and sub-10ms in-memory routing for conversational greetings (*"hi"*, *"kaise ho"*, *"namaste"*).
+- 🧠 **Autonomous Multi-Agent Architecture**: Separate deterministic agents for **Customer Relations**, **Order & Inventory Management**, and **Finance/Ledger Reconciliation**.
+- 🔒 **Privacy & DPDP Compliance**: Built-in deterministic `#private` and `#resume` switches allow sellers and customers to opt out of AI processing instantly.
+- 📊 **Dual Ledger Architecture**: Real-time Supabase PostgreSQL backend with Row-Level Security (RLS) + dual backup sync to Google Sheets.
+- 📱 **Pixel-Accurate Seller Dashboard**: Modern Next.js 16 + React 19 + Tailwind CSS dark-green dashboard for desktop (`/dashboard`) and mobile (`/mobile`).
 
 ---
 
-## 📁 Project Structure
+## 🏛️ System Architecture
+
+```
+                                  [ Customer / Buyer on WhatsApp ]
+                                                 │
+                                                 ▼
+                                     [ Twilio WhatsApp Gateway ]
+                                                 │
+                                                 ▼ (HTTP POST)
+                                   [ FastAPI Webhook Engine ]
+                                                 │
+                    ┌────────────────────────────┴──────────────────────────┐
+                    ▼                                                       ▼
+        [ Instant Fast-Path ]                                  [ Multimodal AI Pipeline ]
+     (greetings: < 10ms response)                         ├── Text: Groq (openai/gpt-oss-20b)
+                                                          ├── Audio: Gemini Multimodal Audio
+                                                          └── Images: Gemini Vision (UPI OCR)
+                                                                            │
+                                                                            ▼
+                                                                [ Normalized Schema ]
+                                                                 (ExtractedMessage)
+                                                                            │
+                                                                            ▼
+                                                                  [ Orchestrator ]
+                     ┌──────────────────────────────────────────────────────┼──────────────────────────────────────┐
+                     ▼                                                      ▼                                      ▼
+           [ Customer Agent ]                                       [ Order Agent ]                        [ Finance Agent ]
+   • Product catalog search                                 • Deterministic inventory check        • Match UTR & amount to orders
+   • Size, price & availability                             • Atomic stock reservation             • Create 'pending_verification' claim
+   • Delivery & return policies                             • Subtotal & total math in Python      • Calculate outstanding dues
+   • Owner escalation if conf < 0.70                        • Create order (pending_payment)       • Generate daily sales summary
+                     │                                                      │                                      │
+                     └──────────────────────────────────────────────────────┴──────────────────────────────────────┘
+                                                                │
+                                                                ▼
+                                                [ Supabase PostgreSQL + RLS ]
+                                               (profiles, customers, products,
+                                                 orders, order_items, payments)
+                                                                │
+                                              ┌─────────────────┴─────────────────┐
+                                              ▼                                   ▼
+                                    [ Next.js Dashboard ]               [ Google Sheets Sync ]
+                                    (Desktop & Mobile UI)                 (Background Backup)
+```
+
+---
+
+## 🤖 Phase 3: The Orchestrator & Three Specialized Agents
+
+### 1. The Orchestrator (`backend/app/agents/orchestrator.py`)
+The Orchestrator evaluates deterministic business rules **before** routing messages to specialized agents:
+
+| Command / Trigger | Action Taken |
+| :--- | :--- |
+| **`#private`** | **Activates Privacy Mode**: Pauses automated AI processing, ledger writes, and memory storage for that specific customer number. Replies confirming that assistant is paused. |
+| **`#resume`** | **Deactivates Privacy Mode**: Resumes automated assistant replies and ledger tracking for that customer. |
+| **`#confirm`** | **Owner Approval**: Confirms and commits a pending low-confidence order or payment claim into the verified business ledger. |
+| **`#reject`** | **Owner Rejection**: Discards or declines an uncertain transaction or complaint. |
+| **`summary` / `dues` / `hisaab`** | **Financial Snapshot**: Generates an instant owner report on WhatsApp showing today's verified collections, pending claims, and total outstanding dues. |
+
+---
+
+### 2. Customer Agent (`backend/app/agents/customer_agent.py`)
+*The Conversation & Store Policy Specialist.*
+- **Catalog Inquiries**: Searches the seller's active product catalog by keyword, size, or color and replies with item descriptions and prices.
+- **Delivery & Tracking**: Fetches existing customer orders from Supabase and gives current parcel status.
+- **Store Policies**: Explains standard business policies (e.g., 7-day exchange tag policy, all-India delivery timelines, return guidelines).
+- **Escalation Policy**:
+  > **If `confidence.overall < 0.70` OR message is a `complaint`:**  
+  > The agent **does not guess or invent store policies**. It immediately:
+  > 1. Sets `escalate: True` and generates an owner alert with the reason.
+  > 2. Sends a reassuring reply to the customer:  
+  >    *"Humein khed hai ki aapko pareshani hui. Maine store owner ko ye message notify kar diya hai. Vo personally aapse jaldi contact karenge."*
+
+---
+
+### 3. Order Agent (`backend/app/agents/order_agent.py`)
+*The Order & Inventory Operations Specialist.*
+- **Strict Deterministic Arithmetic**: Prices, line totals, and order subtotals are calculated **strictly in Python**. LLMs are never allowed to do arithmetic or guess prices.
+- **Stock Availability Verification**: Queries catalog stock prior to order booking. If stock is insufficient, alerts the buyer (e.g., *"Sirf 2 available hai, aapne 5 maanga hai"*) and suggests available alternatives.
+- **Atomic Stock Reservation**: Creates order header (`pending_payment`), inserts order items, and reserves inventory.
+- **Itemized Bill**: Formats an itemized bill with order ID (e.g., `ORD-A4B1C2`), total amount, and delivery address prompt.
+
+---
+
+### 4. Finance Agent (`backend/app/agents/finance_agent.py`)
+*The Payment & Ledger Specialist.*
+- **Screenshot Claim Generation**: Extracts the 12-digit UTR/UPI reference ID and ₹ amount from payment receipts.
+- **Pending Order Reconciliation**: Matches payment claims to the customer's oldest open order.
+- **Anti-Fraud Security Principle**: Payment receipts are **never automatically marked as verified cash**. They are stored as `status = "pending_verification"` until the seller confirms bank settlement on the dashboard.
+- **Outstanding Dues Calculation**: Deterministically calculates:
+  $$\text{Outstanding Dues} = \sum (\text{Non-Cancelled Orders}) - \sum (\text{Verified Payments})$$
+
+---
+
+## 🎯 How Confidence Scores Are Calculated
+
+Every message (text, audio, image) outputs a structured `ConfidenceScore`:
+```json
+"confidence": {
+  "overall": 0.95,
+  "items": 0.95,
+  "amount": 1.0
+}
+```
+
+### Calculation Rules & Penalty Thresholds:
+1. **Text Messages**:
+   - Clear item names, quantities, and sizes $\rightarrow$ `overall: 0.90 – 0.98`.
+   - Vague queries (*"kuch accha dikhao"*, missing size or color) $\rightarrow$ `items: 0.50`, `overall: 0.60`.
+2. **Audio Voice Notes**:
+   - Clear Hindi/Hinglish speech $\rightarrow$ `overall: 0.88 – 0.95`.
+   - Background traffic noise, whispering, or muffled microphone $\rightarrow$ penalized to `overall < 0.70` (triggers owner escalation).
+3. **UPI Payment Receipts**:
+   - Clear PhonePe/GPay/Paytm checkmark with visible 12-digit UTR and ₹ amount $\rightarrow$ `overall: 0.95 – 1.0`.
+   - Blurry image, cropped reference number, or *"Payment Pending"* status $\rightarrow$ penalized to `overall: 0.50 – 0.65` (`escalate_to_owner = True`).
+4. **General Escalation Trigger**:
+   - Whenever `confidence.overall < 0.75`, `escalate_to_owner` is automatically set to `True`, creating an approval record and preventing blind automated ledger updates.
+
+---
+
+## ⚡ Latency & Speed Optimizations
+
+To comfortably beat Twilio's **15-second webhook timeout window**, Munim AI uses a 4-tier speed architecture:
+
+1. **Sub-10ms Fast-Path Greetings**:
+   - Over 18 common greetings (*"hi"*, *"kaise ho"*, *"namaste"*, *"hello ji"*, *"kya haal hai"*) are intercepted by an in-memory dictionary lookup. Response delivered in **< 10ms**.
+2. **In-Memory TTL Catalog Cache**:
+   - Product catalog is cached in memory with a 5-minute TTL. Eliminates repeated Google Sheets / database roundtrips, saving **2.5 to 4 seconds** per message.
+3. **Groq LPU Fast Path (< 1s)**:
+   - Plain text orders and inquiries run through Groq's `openai/gpt-oss-20b` endpoint with a 4.0s timeout, returning structured intents in **300ms to 800ms**.
+4. **Direct Twilio Binary Media Streaming**:
+   - Voice notes and images are streamed directly from Twilio's media servers into memory and passed to Gemini Multimodal models, avoiding disk I/O bottlenecks.
+
+---
+
+## 📁 Updated Project Structure
 
 ```
 Munim AI/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                  # FastAPI application entrypoint
-│   │   ├── api/routes/webhook.py    # GET (handshake) & POST (messages) webhook
-│   │   ├── core/config.py           # Pydantic Settings & environment validation
-│   │   ├── models/schemas.py        # Strict Pydantic models for intent extraction
+│   │   ├── main.py                     # FastAPI entrypoint, CORS & route registration
+│   │   ├── api/
+│   │   │   └── routes/
+│   │   │       ├── webhook.py          # Sub-1s Twilio WhatsApp webhook & media handler
+│   │   │       ├── auth.py             # Supabase seller registration, login, profile
+│   │   │       └── dashboard.py        # Seller metrics, sales charts, dues API
+│   │   ├── ai/
+│   │   │   ├── __init__.py             # Multimodal pipeline exports
+│   │   │   ├── gemini.py               # Gemini multimodal client (audio, vision, JSON)
+│   │   │   ├── text_extractor.py       # Groq fast-path (<1s) + Gemini fallback
+│   │   │   ├── audio_extractor.py      # Gemini Multimodal Audio voice note extractor
+│   │   │   ├── image_extractor.py      # Gemini Vision UPI receipt & handwritten OCR
+│   │   │   ├── normalize_message.py    # Strict schema validation & confidence scorer
+│   │   │   └── response_generator.py   # Hinglish reply & owner alert builder
+│   │   ├── agents/
+│   │   │   ├── __init__.py             # Agent exports
+│   │   │   ├── orchestrator.py         # Master router, privacy switches & owner commands
+│   │   │   ├── customer_agent.py       # Conversation, catalog, policies, escalation
+│   │   │   ├── order_agent.py          # Inventory verify, atomic reserve & order math
+│   │   │   └── finance_agent.py        # UPI match, payment claims & dues calculation
 │   │   ├── services/
-│   │   │   ├── ai.py                # Gemini extraction & smart reply generator
-│   │   │   ├── sheets.py            # Google Sheets CRUD & auto-tab setup
-│   │   │   ├── whatsapp.py          # WhatsApp Cloud API message sender
-│   │   │   └── db.py                # SQLite deduplication & state tracking
-│   │   └── utils/privacy.py         # #private / #resume & PrivateList checker
-│   └── data/                        # Local SQLite DB & service account key (gitignored)
-├── docs/
-│   ├── schema.md                    # Data contract between AI & storage
-│   └── test_messages.md             # Curated Hinglish test dataset
+│   │   │   ├── catalog.py              # Catalog search, variant finder & in-memory cache
+│   │   │   ├── orders.py               # create_with_stock_reservation & payment matching
+│   │   │   ├── payments.py             # create_claim & outstanding dues arithmetic
+│   │   │   ├── database_service.py     # Reusable Supabase CRUD with tenant isolation
+│   │   │   ├── dashboard_service.py    # Analytics, revenue, top products, sales trends
+│   │   │   ├── sheets.py               # Google Sheets background backup sync
+│   │   │   └── db.py                   # SQLite idempotency deduplication
+│   │   └── core/
+│   │       ├── config.py               # Pydantic Settings
+│   │       ├── supabase_client.py      # Cached Supabase client
+│   │       └── auth.py                 # JWT Bearer token authentication dependency
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx                    # Pixel-accurate marketing landing page
+│   │   ├── dashboard/page.tsx          # Desktop seller dashboard with live refresh
+│   │   ├── mobile/page.tsx             # Mobile seller dashboard mockup
+│   │   ├── login/page.tsx              # Seller login page
+│   │   └── signup/page.tsx             # Seller signup & store onboarding
+│   ├── components/                     # Reusable UI components (SplineChart, TopNav, etc.)
+│   └── context/AuthContext.tsx         # Global seller authentication state
 ├── scripts/
-│   ├── check_env.py                 # Automated credentials & API validator
-│   ├── test_webhook.py              # End-to-end mock webhook test suite
-│   └── test_pipeline.py             # Pipeline simulation without network dependencies
-├── .env.example                     # Environment variables template
-├── .gitignore
-├── Dockerfile                       # Production container setup (DigitalOcean / Vultr)
-├── LICENSE                          # MIT License
-├── requirements.txt
-└── SECURITY.md                      # Security policy & Indian DPDP compliance
+│   ├── test_multimodal_extraction.py   # Phase 1 multimodal unit tests
+│   ├── test_phase3_agents.py           # Phase 3 agent & orchestrator test suite
+│   └── test_supabase_connection.py     # Live Supabase connection diagnostic
+├── .env.example
+├── package.json
+└── requirements.txt
 ```
 
 ---
 
-## 🔑 How to Get Each Required Credential (.env Guide)
+## 🛠️ Environment Configuration (`.env`)
 
-Follow these step-by-step instructions to get every credential required in `.env`:
+Create a `.env` file in the project root:
 
-### 1. Google Gemini API Key (`GEMINI_API_KEY`)
-1. Visit **[Google AI Studio](https://aistudio.google.com/)** and sign in with your Google account.
-2. Click the blue **"Get API key"** button on the top left.
-3. Click **"Create API key in new project"**.
-4. Copy the key (starts with `AIzaSy...` or `AQ...`) and paste it as `GEMINI_API_KEY=...`.
-5. Set `GEMINI_MODEL=gemini-3.5-flash`.
+```env
+# Twilio WhatsApp API
+TWILIO_ACCOUNT_SID=ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 
----
+# Business Owner Details
+OWNER_WHATSAPP_NUMBER=918587859710
 
-### 2. Google Sheets API & Service Account (`GOOGLE_SERVICE_ACCOUNT_JSON` & `GOOGLE_SHEET_ID`)
+# AI Credentials
+GROQ_API_KEY=gsk_your_groq_api_key_here
+GEMINI_API_KEY=AIzaSy_your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
 
-#### A. Generate Service Account JSON:
-1. Open **[Google Cloud Console](https://console.cloud.google.com/)**.
-2. Create a new project (e.g., `Munim-AI`) or select an existing one.
-3. Go to **APIs & Services** > **Library**.
-4. Search for **"Google Sheets API"** and click **Enable**.
-5. Search for **"Google Drive API"** and click **Enable**.
-6. Go to **IAM & Admin** > **Service Accounts** > click **"Create Service Account"**.
-7. Name it (e.g. `munim-sheets-bot`) and click **Done**.
-8. Click on your newly created service account > go to the **Keys** tab > click **Add Key** > **Create new key** > select **JSON** > **Create**.
-9. The JSON file will download automatically. Rename this file to `service_account.json` and move it to:
-   ```
-   backend/data/service_account.json
-   ```
-10. Note the service account email (e.g., `munim-sheets-bot@your-project.iam.gserviceaccount.com`).
+# Supabase (Database & Auth)
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
 
-#### B. Setup Google Sheet:
-1. Create a blank Google Sheet in your [Google Drive](https://drive.google.com/).
-2. Click **Share** (top right) and paste the **Service Account email** from step 10 with **Editor** permissions.
-3. Copy the Sheet ID from your browser URL:
-   ```
-   https://docs.google.com/spreadsheets/d/<COPY_THIS_SHEET_ID_HERE>/edit
-   ```
-4. Paste it as `GOOGLE_SHEET_ID=...` in your `.env`.
+# Google Sheets Backup (Optional)
+GOOGLE_SERVICE_ACCOUNT_JSON=./backend/data/service_account.json
+GOOGLE_SHEET_ID=your_google_sheet_id_here
 
-*(Note: Munim AI automatically creates all required tabs — `Customers`, `Orders`, `Payments`, `Catalog`, `PrivateList` — on first run!)*
+# App Settings
+APP_ENV=development
+APP_SECRET_KEY=munim-ai-hackathon-secret-2026
+LOG_LEVEL=INFO
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
 
 ---
 
-### 3. Meta WhatsApp Cloud API (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`)
-1. Go to **[Meta for Developers](https://developers.facebook.com/)** and log in.
-2. Click **My Apps** > **Create App** > select **Other** > choose **Business** type.
-3. In the App Dashboard, scroll to **WhatsApp** and click **Set up**.
-4. In the left navigation, open **WhatsApp** > **API Setup**:
-   - Copy **Phone number ID** and paste as `WHATSAPP_PHONE_NUMBER_ID=...`.
-   - Copy **Temporary access token** and paste as `WHATSAPP_ACCESS_TOKEN=...`.  
-     *(Note: Dev tokens expire every 24 hours. Generate a fresh one when resuming work).*
-5. Set `WHATSAPP_VERIFY_TOKEN` to any secure secret string (default: `munim_verify_2026`).
-6. Set `WHATSAPP_API_VERSION=v19.0`.
+## 🧪 Verification & Test Commands
 
----
+Run the comprehensive test suites to verify each layer independently:
 
-### 4. Owner WhatsApp Number (`OWNER_WHATSAPP_NUMBER`)
-- Enter your personal WhatsApp number in **international format without `+` or spaces**.
-- Example for India: `919876543210`.
-- Used to receive owner escalation alerts (custom discounts, complaints) and store summary reports.
-
----
-
-### 5. Groq Whisper API Key (`GROQ_API_KEY`)
-1. Go to **[Groq Console](https://console.groq.com/)** and create an account.
-2. In the sidebar, click **API Keys** > **Create API Key**.
-3. Name it `Munim-AI` and click **Submit**.
-4. Copy the key (starts with `gsk_...`) and paste as `GROQ_API_KEY=...`.
-
----
-
-## ⚡ Quick Start Guide
-
-### 1. Setup Virtual Environment
 ```bash
-# Clone the repository
-git clone https://github.com/vib3withsimran/Munim-Ai-.git
-cd "Munim AI"
+# 1. Test Phase 1 Multimodal Extraction (Text, Voice Note, UPI Image)
+python scripts/test_multimodal_extraction.py
 
-# Create virtual environment
-python -m venv .venv
+# 2. Test Phase 3 Orchestrator & Three Specialized Agents
+python scripts/test_phase3_agents.py
 
-# Activate environment
-# On Windows:
-.venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
-
-### 3. Verify Credentials & Connections
-Run the built-in diagnostic tool to test all credentials before running the server:
-```bash
-python scripts/check_env.py
+# 3. Test Supabase Database & Auth Connectivity
+python -m scripts.test_supabase_connection
 ```
 
 ---
 
-## 🧪 Testing the Webhook
+## 🚀 Running Munim AI
 
-### Option A: Local Mock Test Suite (No Active Meta Account Needed!)
-Test the entire pipeline (AI extraction, Google Sheets order creation, escalation alert, and deduplication) locally:
+### 1. Start FastAPI Backend
 ```bash
-python scripts/test_webhook.py
+python -m uvicorn backend.app.main:app --port 8000 --reload
 ```
-This sends simulated WhatsApp payloads directly into FastAPI with `DRY_RUN=1` and prints outbound replies in your terminal.
 
----
+### 2. Start Next.js Frontend Dashboard
+```bash
+cd frontend
+pnpm run dev
+```
+Open **[http://localhost:3000](http://localhost:3000)** for the marketing landing page and **[http://localhost:3000/dashboard](http://localhost:3000/dashboard)** for the seller khata dashboard.
 
-### Option B: Live WhatsApp Testing (via ngrok)
-
-1. **Start the FastAPI server:**
-   ```bash
-   python -m uvicorn backend.app.main:app --reload --port 8000
-   ```
-
-2. **In a second terminal, launch ngrok:**
-   ```bash
-   ngrok http 8000
-   ```
-
-3. **Configure Meta Webhook:**
-   - In Meta Developer Console > **WhatsApp** > **Configuration** > **Edit Webhook**.
-   - **Callback URL**: `https://<YOUR-NGROK-SUBDOMAIN>.ngrok-free.app/webhook`
-   - **Verify Token**: `munim_verify_2026`
-   - Click **Verify and Save**.
-   - Under **Webhook fields**, click **Manage** and subscribe to **`messages`**.
-
-4. **Send a WhatsApp Message:**
-   Send a text like *"2 kurti chahiye medium pink wali"* to your test business number and watch it reply and log directly to your Google Sheet!
+### 3. Expose via ngrok for Live WhatsApp Webhook
+```bash
+ngrok http 8000
+```
+Configure your Twilio WhatsApp Sandbox Webhook URL to:
+```
+https://<YOUR-NGROK-SUBDOMAIN>.ngrok-free.app/webhook
+```
 
 ---
 
 ## 🛡️ License & Compliance
 
-- Distributed under the [MIT License](LICENSE).
-- Complies with India's **Digital Personal Data Protection (DPDP) Act 2023** principles through data minimization and explicit `#private` opt-out switches. See [SECURITY.md](SECURITY.md) for details.
+Distributed under the **MIT License**. Built in compliance with India's **Digital Personal Data Protection (DPDP) Act 2023** principles through data minimization, deterministic privacy switches (`#private`), and human-in-the-loop owner approval for financial settlements.

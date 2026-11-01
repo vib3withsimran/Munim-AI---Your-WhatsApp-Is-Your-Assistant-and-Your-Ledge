@@ -178,7 +178,7 @@ Message: "{clean_text}"
 
     # 2. Fallback: Google Gemini API
     candidate_models = [settings.GEMINI_MODEL, "gemini-3.1-flash-lite", "gemini-2.5-pro"]
-    
+
     for model_name in candidate_models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
         payload = {

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # AI (Gemini & Groq)
     GEMINI_API_KEY: str = Field(default="")
-    GEMINI_MODEL: str = Field(default="gemini-3.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
     GROQ_API_KEY: str = Field(default="")
 
     # App settings
@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = Field(default="")
     SUPABASE_PUBLISHABLE_KEY: str = Field(default="")
     SUPABASE_STORAGE_BUCKET: str = Field(default="munim-media")
+
+    # Meko Long-Term Memory
+    MEKO_API_KEY: str = Field(default="")
+    MEKO_DATAPACK_BUILD: str = Field(default="")
+    MEKO_DATAPACK_CUSTOMER: str = Field(default="")
+    MEKO_DATAPACK_ORDERS: str = Field(default="")
+    MEKO_DATAPACK_FINANCE: str = Field(default="")
 
     @property
     def cors_origins_list(self) -> list[str]:
